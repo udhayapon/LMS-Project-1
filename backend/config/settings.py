@@ -1,4 +1,5 @@
 from pathlib import Path
+import mimetypes
 import os
 
 # ===================== BASE =====================
@@ -26,14 +27,16 @@ INSTALLED_APPS = [
 
     # Third-party
     'rest_framework',
+    'rest_framework.authtoken',
     'corsheaders',
 ]
 
 
 # ===================== MIDDLEWARE =====================
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',   # ✅ MUST BE FIRST
+    'corsheaders.middleware.CorsMiddleware',   
     'django.middleware.security.SecurityMiddleware',
+    'config.range_middleware.RangeFileMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -91,7 +94,7 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
-USE_TZ = True
+USE_TZ = False
 
 
 # ===================== STATIC =====================
@@ -101,6 +104,7 @@ STATIC_URL = 'static/'
 # ===================== MEDIA =====================
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = BASE_DIR / 'media'
 
 
 # ===================== DEFAULT PK =====================
@@ -114,6 +118,7 @@ AUTH_USER_MODEL = 'users.User'
 # ===================== DRF =====================
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ]
 }
@@ -125,4 +130,12 @@ CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
+    "http://localhost:5173",
 ]
+
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_HTTPONLY = False
+
+#===================Media / Storage section========================================
+mimetypes.add_type("application/pdf", ".pdf", True)
+DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'

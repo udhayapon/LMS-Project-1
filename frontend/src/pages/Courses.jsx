@@ -3,71 +3,85 @@ import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import API from "../api";
 
+// =============================================================
+//  Courses Page — Course Management (CRUD)
+// =============================================================
+
 export default function Courses() {
-  const [courses, setCourses] = useState([]);
+
+  // ─────────────────────────────────────────────────────────
+  //  STATE
+  // ─────────────────────────────────────────────────────────
+
+  const [courses, setCourses]   = useState([]);
   const [teachers, setTeachers] = useState([]);
-
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    teacher: ""
-  });
-
   const [editingId, setEditingId] = useState(null);
 
-  // ✅ LOAD DATA ONCE
+  const [form, setForm] = useState({
+    title:       "",
+    description: "",
+    teacher:     "",
+  });
+
+
+  // ─────────────────────────────────────────────────────────
+  //  LIFECYCLE
+  // ─────────────────────────────────────────────────────────
+
   useEffect(() => {
     fetchCourses();
     fetchTeachers();
   }, []);
 
-  // ================= FETCH COURSES =================
+
+  // ─────────────────────────────────────────────────────────
+  //  API CALLS
+  // ─────────────────────────────────────────────────────────
+
   const fetchCourses = async () => {
     try {
       const res = await API.get("courses/");
       setCourses(res.data || []);
     } catch (err) {
-      console.error("Course error:", err);
+      console.error("Course fetch error:", err);
     }
   };
 
-  // ================= FETCH TEACHERS =================
   const fetchTeachers = async () => {
     try {
       const res = await API.get("users/");
-      const teacherList = (res.data || []).filter(
-        (u) => u.role === "teacher"
-      );
+      const teacherList = (res.data || []).filter((u) => u.role === "teacher");
       setTeachers(teacherList);
     } catch (err) {
-      console.error("Teacher error:", err);
+      console.error("Teacher fetch error:", err);
     }
   };
 
-  // ================= HANDLE INPUT =================
+
+  // ─────────────────────────────────────────────────────────
+  //  FORM HANDLERS
+  // ─────────────────────────────────────────────────────────
+
   const handleChange = (e) => {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value
-    });
+    setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // ================= SUBMIT =================
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    try {
-      const payload = {
-        ...form,
-        teacher: Number(form.teacher) // ✅ important fix
-      };
+    const payload = {
+      ...form,
+      teacher: Number(form.teacher), 
+    };
 
+    try {
       if (editingId) {
         await API.put(`courses/${editingId}/`, payload);
       } else {
         await API.post("courses/", payload);
       }
 
+      // Reset form after success
       setForm({ title: "", description: "", teacher: "" });
       setEditingId(null);
       fetchCourses();
@@ -76,17 +90,15 @@ export default function Courses() {
     }
   };
 
-  // ================= EDIT =================
   const handleEdit = (course) => {
     setForm({
-      title: course.title || "",
+      title:       course.title       || "",
       description: course.description || "",
-      teacher: course.teacher || ""
+      teacher:     course.teacher     || "",
     });
     setEditingId(course.id);
   };
 
-  // ================= DELETE =================
   const handleDelete = async (id) => {
     try {
       await API.delete(`courses/${id}/`);
@@ -96,6 +108,11 @@ export default function Courses() {
     }
   };
 
+
+  // ─────────────────────────────────────────────────────────
+  //  RENDER
+  // ─────────────────────────────────────────────────────────
+
   return (
     <div className="layout">
       <Sidebar />
@@ -103,14 +120,14 @@ export default function Courses() {
       <div className="main">
         <Navbar />
 
-        {/* ✅ IMPORTANT WRAPPER */}
         <div className="content">
 
+          {/* ── Page Header ───────────────────────────────── */}
           <div className="header-box">
             <h2>Course Management</h2>
           </div>
 
-          {/* ================= FORM ================= */}
+          {/* ── Add / Edit Form ───────────────────────────── */}
           <div className="card">
             <form onSubmit={handleSubmit} className="form-grid">
 
@@ -149,10 +166,11 @@ export default function Courses() {
               <button className="btn-primary" type="submit">
                 {editingId ? "Update" : "Add"}
               </button>
+
             </form>
           </div>
 
-          {/* ================= TABLE ================= */}
+          {/* ── Courses Table ─────────────────────────────── */}
           <div className="card">
             <table className="styled-table">
               <thead>
@@ -179,7 +197,6 @@ export default function Courses() {
                       <td>{course.description}</td>
                       <td>{course.teacher_name}</td>
                       <td>{course.teacher_dept || "N/A"}</td>
-
                       <td>
                         <button
                           className="btn-edit"
@@ -187,7 +204,6 @@ export default function Courses() {
                         >
                           Edit
                         </button>
-
                         <button
                           className="btn-danger"
                           onClick={() => handleDelete(course.id)}

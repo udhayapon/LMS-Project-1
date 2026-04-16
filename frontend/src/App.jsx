@@ -6,7 +6,10 @@ import Users from "./pages/Users";
 import Courses from "./pages/Courses";
 import Enrollments from "./pages/Enrollments";
 import Lectures from "./pages/Lectures";
+import WatchLecture from "./pages/WatchLecture";
 import Assignments from "./pages/Assignments";
+import TeacherHome from "./pages/TeacherHome";
+import StudentSubmission from "./pages/StudentSubmission";
 
 
 // ===================== SAFE USER PARSER =====================
@@ -18,17 +21,16 @@ const getUser = () => {
   }
 };
 
-
 // ===================== PROTECTED ROUTE =====================
 function ProtectedRoute({ children, adminOnly = false }) {
   const user = getUser();
 
-  // ❌ Not logged in
+  // Not logged in
   if (!user) {
     return <Navigate to="/" replace />;
   }
 
-  // ❌ Not admin (for admin routes)
+  // Not admin (for admin routes)
   if (adminOnly && user.role !== "admin") {
     return <Navigate to="/" replace />;
   }
@@ -58,6 +60,25 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* TEACHER ROUTE */}
+        <Route
+        path="/teacher-home"
+        element={
+          <ProtectedRoute>
+            <TeacherHome />
+          </ProtectedRoute>
+        }
+      />
+        
+        <Route
+        path="/submissions"
+        element={
+          <ProtectedRoute>
+            <StudentSubmission />
+          </ProtectedRoute>
+        }
+      />
 
         <Route
           path="/users"
@@ -95,6 +116,8 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        <Route path="/watch/:id" element={<WatchLecture />} />
 
         <Route
           path="/assignments"

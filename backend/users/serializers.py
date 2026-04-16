@@ -14,18 +14,18 @@ class UserSerializer(serializers.ModelSerializer):
             'role',
             'department',
 
-            # ✅ NEW FIELDS
+            #  NEW FIELDS
             'roll_number',
             'employee_id'
         ]
 
         extra_kwargs = {
             'password': {'write_only': True},
-            'roll_number': {'read_only': True},   # auto generated
-            'employee_id': {'read_only': True}    # auto generated
+            'roll_number': {'read_only': True},   
+            'employee_id': {'read_only': True}   
         }
 
-    # ✅ CREATE USER
+    # CREATE USER
     def create(self, validated_data):
         password = validated_data.pop('password')
         user = User(**validated_data)
@@ -33,7 +33,7 @@ class UserSerializer(serializers.ModelSerializer):
         user.save()
         return user
 
-    # ✅ UPDATE USER
+    #  UPDATE USER
     def update(self, instance, validated_data):
         password = validated_data.pop('password', None)
 

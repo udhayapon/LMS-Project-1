@@ -646,3 +646,8 @@ tr:hover {
   border-radius: 6px;
   cursor: pointer;
 }
+
+/* ADD this at the bottom of App.css */
+.teacher-layout .sidebar {
+  background: #1a1f2e !important;
+}

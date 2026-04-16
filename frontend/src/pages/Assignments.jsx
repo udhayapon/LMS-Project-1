@@ -1,7 +1,36 @@
+// ===================== REACT IMPORTS =====================
 import React, { useEffect, useState } from "react";
+
+// ===================== API =====================
 import API from "../api";
 
-/* ─── helpers ─── */
+
+// ===================== STYLES =====================
+const labelStyle = {
+  display: "block",
+  marginBottom: 6,
+  fontSize: 12,
+  fontWeight: 600,
+  color: "#475569",
+  letterSpacing: "0.3px",
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: "10px 14px",
+  borderRadius: 9,
+  border: "1.5px solid #e2e8f0",
+  fontSize: 13.5,
+  color: "#1e293b",
+  background: "#f8fafc",
+  outline: "none",
+  fontFamily: "inherit",
+  boxSizing: "border-box",
+  transition: "border-color 0.15s",
+};
+
+
+// ===================== HELPERS =====================
 function formatDate(raw) {
   if (!raw) return "—";
   return new Date(raw).toLocaleString("en-US", {
@@ -17,7 +46,8 @@ function isOverdue(due_date) {
   return due_date && new Date(due_date) < new Date();
 }
 
-/* ─── sub-components ─── */
+
+// ===================== SUB COMPONENTS =====================
 function StatusBadge({ due_date }) {
   const overdue = isOverdue(due_date);
   return (
@@ -61,13 +91,15 @@ function AssignmentCard({ a, user, file, setFile, submitAssignment }) {
         border: `1.5px solid ${hover ? "#c7d2fe" : "#e2e8f0"}`,
         overflow: "hidden",
         transition: "all 0.2s ease",
-        boxShadow: hover ? "0 8px 32px rgba(79,70,229,0.08)" : "0 1px 4px rgba(0,0,0,0.04)",
+        boxShadow: hover
+          ? "0 8px 32px rgba(79,70,229,0.08)"
+          : "0 1px 4px rgba(0,0,0,0.04)",
         transform: hover ? "translateY(-2px)" : "none",
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      {/* card top stripe */}
+      {/* ── top stripe ── */}
       <div
         style={{
           height: 4,
@@ -78,15 +110,36 @@ function AssignmentCard({ a, user, file, setFile, submitAssignment }) {
       />
 
       <div style={{ padding: "20px 24px" }}>
-        {/* header row */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+
+        {/* ── header row ── */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            marginBottom: 10,
+          }}
+        >
           <div>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1e293b", lineHeight: 1.3 }}>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: 16,
+                fontWeight: 700,
+                color: "#1e293b",
+                lineHeight: 1.3,
+              }}
+            >
               {a.title}
             </h3>
             <p style={{ margin: "5px 0 0", fontSize: 12.5, color: "#94a3b8" }}>
               Due&nbsp;
-              <span style={{ color: isOverdue(a.due_date) ? "#e11d48" : "#64748b", fontWeight: 500 }}>
+              <span
+                style={{
+                  color: isOverdue(a.due_date) ? "#e11d48" : "#64748b",
+                  fontWeight: 500,
+                }}
+              >
                 {formatDate(a.due_date)}
               </span>
             </p>
@@ -94,7 +147,7 @@ function AssignmentCard({ a, user, file, setFile, submitAssignment }) {
           <StatusBadge due_date={a.due_date} />
         </div>
 
-        {/* description */}
+        {/* ── description ── */}
         {a.description && (
           <p
             style={{
@@ -129,7 +182,7 @@ function AssignmentCard({ a, user, file, setFile, submitAssignment }) {
           </button>
         )}
 
-        {/* student submit */}
+        {/* ── student submit ── */}
         {user.role === "student" && (
           <div
             style={{
@@ -190,28 +243,35 @@ function AssignmentCard({ a, user, file, setFile, submitAssignment }) {
             </button>
           </div>
         )}
+
       </div>
     </div>
   );
 }
 
-/* ─── main component ─── */
+
+// ===================== MAIN COMPONENT =====================
 function Assignments() {
   const user = JSON.parse(localStorage.getItem("user"));
 
   const [assignments, setAssignments] = useState([]);
-  const [file, setFile] = useState(null);
-  const [showForm, setShowForm] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState(null);
+  const [file,        setFile]        = useState(null);
+  const [showForm,    setShowForm]    = useState(false);
+  const [loading,     setLoading]     = useState(false);
+  const [toast,       setToast]       = useState(null);
+  const [form,        setForm]        = useState({
+    title: "",
+    description: "",
+    due_date: "",
+  });
 
-  const [form, setForm] = useState({ title: "", description: "", due_date: "" });
-
+  // ── notify ──
   const notify = (msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
 
+  // ── fetch ──
   const fetchAssignments = async () => {
     setLoading(true);
     try {
@@ -228,6 +288,7 @@ function Assignments() {
     fetchAssignments();
   }, []);
 
+  // ── create ──
   const createAssignment = async () => {
     if (!form.title) return;
     try {
@@ -241,6 +302,7 @@ function Assignments() {
     }
   };
 
+  // ── submit ──
   const submitAssignment = async (assignmentId) => {
     if (!file) { notify("Please attach a file first", "error"); return; }
     const formData = new FormData();
@@ -257,13 +319,20 @@ function Assignments() {
     }
   };
 
-  const active = assignments.filter((a) => !isOverdue(a.due_date));
-  const overdue = assignments.filter((a) => isOverdue(a.due_date));
+  const active  = assignments.filter((a) => !isOverdue(a.due_date));
+  const overdue = assignments.filter((a) =>  isOverdue(a.due_date));
 
   return (
-    <div style={{ padding: "80px 36px 60px", background: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter',sans-serif" }}>
+    <div
+      style={{
+        padding: "80px 36px 60px",
+        background: "#f8fafc",
+        minHeight: "100vh",
+        fontFamily: "'Inter',sans-serif",
+      }}
+    >
 
-      {/* toast */}
+      {/* ── toast ── */}
       {toast && (
         <div
           style={{
@@ -288,13 +357,38 @@ function Assignments() {
 
       <style>{`@keyframes slideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
-      {/* page header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 32, maxWidth: 900 }}>
+      {/* ── page header ── */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-end",
+          marginBottom: 32,
+          maxWidth: 900,
+        }}
+      >
         <div>
-          <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", color: "#94a3b8", textTransform: "uppercase" }}>
+          <p
+            style={{
+              margin: "0 0 4px",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "1.2px",
+              color: "#94a3b8",
+              textTransform: "uppercase",
+            }}
+          >
             Learning Management
           </p>
-          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: "#1e293b", letterSpacing: "-0.5px" }}>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 28,
+              fontWeight: 800,
+              color: "#1e293b",
+              letterSpacing: "-0.5px",
+            }}
+          >
             Assignments
           </h1>
           <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "#94a3b8" }}>
@@ -311,7 +405,9 @@ function Assignments() {
               gap: 7,
               padding: "10px 20px",
               borderRadius: 10,
-              background: showForm ? "#f1f5f9" : "linear-gradient(135deg,#4f46e5,#6366f1)",
+              background: showForm
+                ? "#f1f5f9"
+                : "linear-gradient(135deg,#4f46e5,#6366f1)",
               color: showForm ? "#64748b" : "#fff",
               fontSize: 13.5,
               fontWeight: 700,
@@ -326,7 +422,7 @@ function Assignments() {
         )}
       </div>
 
-      {/* create form */}
+      {/* ── create form ── */}
       {user?.role === "teacher" && showForm && (
         <div
           style={{
@@ -339,7 +435,14 @@ function Assignments() {
             boxShadow: "0 4px 20px rgba(79,70,229,0.07)",
           }}
         >
-          <h3 style={{ margin: "0 0 20px", fontSize: 16, fontWeight: 700, color: "#4f46e5" }}>
+          <h3
+            style={{
+              margin: "0 0 20px",
+              fontSize: 16,
+              fontWeight: 700,
+              color: "#4f46e5",
+            }}
+          >
             Create New Assignment
           </h3>
 
@@ -360,7 +463,9 @@ function Assignments() {
                 placeholder="Add instructions or notes for students..."
                 value={form.description}
                 rows={3}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
                 style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }}
               />
             </div>
@@ -370,15 +475,33 @@ function Assignments() {
               <input
                 type="datetime-local"
                 value={form.due_date}
-                onChange={(e) => setForm({ ...form, due_date: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, due_date: e.target.value })
+                }
                 style={inputStyle}
               />
             </div>
 
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 4 }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                justifyContent: "flex-end",
+                paddingTop: 4,
+              }}
+            >
               <button
                 onClick={() => setShowForm(false)}
-                style={{ padding: "9px 18px", borderRadius: 8, background: "#f8fafc", border: "1.5px solid #e2e8f0", color: "#64748b", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                style={{
+                  padding: "9px 18px",
+                  borderRadius: 8,
+                  background: "#f8fafc",
+                  border: "1.5px solid #e2e8f0",
+                  color: "#64748b",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
               >
                 Cancel
               </button>
@@ -388,13 +511,17 @@ function Assignments() {
                 style={{
                   padding: "9px 22px",
                   borderRadius: 8,
-                  background: form.title ? "linear-gradient(135deg,#4f46e5,#6366f1)" : "#e2e8f0",
+                  background: form.title
+                    ? "linear-gradient(135deg,#4f46e5,#6366f1)"
+                    : "#e2e8f0",
                   color: form.title ? "#fff" : "#94a3b8",
                   fontSize: 13,
                   fontWeight: 700,
                   border: "none",
                   cursor: form.title ? "pointer" : "not-allowed",
-                  boxShadow: form.title ? "0 2px 8px rgba(79,70,229,0.25)" : "none",
+                  boxShadow: form.title
+                    ? "0 2px 8px rgba(79,70,229,0.25)"
+                    : "none",
                   transition: "all 0.2s",
                 }}
               >
@@ -405,14 +532,21 @@ function Assignments() {
         </div>
       )}
 
-      {/* loading */}
+      {/* ── loading ── */}
       {loading && (
-        <div style={{ textAlign: "center", padding: 60, color: "#94a3b8", fontSize: 14 }}>
+        <div
+          style={{
+            textAlign: "center",
+            padding: 60,
+            color: "#94a3b8",
+            fontSize: 14,
+          }}
+        >
           Loading assignments...
         </div>
       )}
 
-      {/* empty */}
+      {/* ── empty state ── */}
       {!loading && assignments.length === 0 && (
         <div
           style={{
@@ -425,65 +559,79 @@ function Assignments() {
           }}
         >
           <div style={{ fontSize: 40, marginBottom: 12 }}>📝</div>
-          <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#1e293b" }}>No assignments yet</p>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#1e293b" }}>
+            No assignments yet
+          </p>
           <p style={{ margin: "6px 0 0", fontSize: 13, color: "#94a3b8" }}>
-            {user?.role === "teacher" ? "Create your first assignment above." : "Check back later."}
+            {user?.role === "teacher"
+              ? "Create your first assignment above."
+              : "Check back later."}
           </p>
         </div>
       )}
 
-      {/* active section */}
+      {/* ── active section ── */}
       {active.length > 0 && (
         <div style={{ maxWidth: 900, marginBottom: 28 }}>
-          <p style={{ margin: "0 0 14px", fontSize: 10.5, fontWeight: 700, color: "#16a34a", letterSpacing: "1px", textTransform: "uppercase" }}>
+          <p
+            style={{
+              margin: "0 0 14px",
+              fontSize: 10.5,
+              fontWeight: 700,
+              color: "#16a34a",
+              letterSpacing: "1px",
+              textTransform: "uppercase",
+            }}
+          >
             ● Active ({active.length})
           </p>
           <div style={{ display: "grid", gap: 14 }}>
             {active.map((a) => (
-              <AssignmentCard key={a.id} a={a} user={user} file={file} setFile={setFile} submitAssignment={submitAssignment} />
+              <AssignmentCard
+                key={a.id}
+                a={a}
+                user={user}
+                file={file}
+                setFile={setFile}
+                submitAssignment={submitAssignment}
+              />
             ))}
           </div>
         </div>
       )}
 
-      {/* overdue section */}
+      {/* ── overdue section ── */}
       {overdue.length > 0 && (
         <div style={{ maxWidth: 900 }}>
-          <p style={{ margin: "0 0 14px", fontSize: 10.5, fontWeight: 700, color: "#e11d48", letterSpacing: "1px", textTransform: "uppercase" }}>
+          <p
+            style={{
+              margin: "0 0 14px",
+              fontSize: 10.5,
+              fontWeight: 700,
+              color: "#e11d48",
+              letterSpacing: "1px",
+              textTransform: "uppercase",
+            }}
+          >
             ● Overdue ({overdue.length})
           </p>
           <div style={{ display: "grid", gap: 14 }}>
             {overdue.map((a) => (
-              <AssignmentCard key={a.id} a={a} user={user} file={file} setFile={setFile} submitAssignment={submitAssignment} />
+              <AssignmentCard
+                key={a.id}
+                a={a}
+                user={user}
+                file={file}
+                setFile={setFile}
+                submitAssignment={submitAssignment}
+              />
             ))}
           </div>
         </div>
       )}
+
     </div>
   );
 }
-
-const labelStyle = {
-  display: "block",
-  marginBottom: 6,
-  fontSize: 12,
-  fontWeight: 600,
-  color: "#475569",
-  letterSpacing: "0.3px",
-};
-
-const inputStyle = {
-  width: "100%",
-  padding: "10px 14px",
-  borderRadius: 9,
-  border: "1.5px solid #e2e8f0",
-  fontSize: 13.5,
-  color: "#1e293b",
-  background: "#f8fafc",
-  outline: "none",
-  fontFamily: "inherit",
-  boxSizing: "border-box",
-  transition: "border-color 0.15s",
-};
 
 export default Assignments;

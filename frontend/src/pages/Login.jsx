@@ -11,57 +11,75 @@ function Login() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const user = localStorage.getItem("user");
-    if (user) navigate("/dashboard");
-  }, []);
-
-  const handleLogin = async () => {
-    setError("");
-
-    if (!username || !password) {
-      setError("Please enter your username and password.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const response = await fetch(
-        "http://127.0.0.1:8000/api/users/login/", // ✅ FIXED URL
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            username,
-            password,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (response.ok) {
-        localStorage.setItem("user", JSON.stringify(data));
-
-        // ✅ Role-based navigation
-        if (data.role === "admin") navigate("/admin");
-        else if (data.role === "teacher") navigate("/teacher");
-        else navigate("/student");
+  try {
+    const user = JSON.parse(localStorage.getItem("user"));
+    if (user && user.role) {
+      if (user.role === "admin") {
+        navigate("/dashboard");
+      } else if (user.role === "teacher") {
+        navigate("/teacher-home");
       } else {
-        setError(data.error || "Invalid username or password.");
+        navigate("/lectures");
       }
-    } catch (err) {
-      setError("Unable to connect to the server. Please try again.");
     }
+  } catch (e) {
+    localStorage.removeItem("user");
+  }
+}, []);
 
-    setLoading(false);
-  };
+const handleLogin = async () => {
+  if (loading) return;   
+
+  setError("");
+
+  if (!username || !password) {
+    setError("Please enter your username and password.");
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const response = await fetch(
+      "http://127.0.0.1:8000/api/users/login/",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",   // keep this
+        body: JSON.stringify({
+          username,
+          password,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (response.ok) {
+      localStorage.setItem("user", JSON.stringify(data));
+
+      
+      if (data.role === "admin") navigate("/dashboard");
+      else if (data.role === "teacher") navigate("/teacher-home");
+      else navigate("/lectures");
+    } else {
+      setError(data.error || "Invalid username or password.");
+    }
+  } catch (err) {
+    setError("Unable to connect to the server. Please try again.");
+  }
+
+  setLoading(false);
+};
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") handleLogin();
-  };
+  if (e.key === "Enter") {
+    e.preventDefault();   
+    handleLogin();
+  }
+};
 
   return (
     <div style={styles.page}>
