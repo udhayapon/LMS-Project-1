@@ -1,0 +1,84 @@
+/* ================= ROOT VARIABLES ================= */
+:root {
+  --text: #6b6375;
+  --text-h: #08060d;
+  --bg: #ffffff;
+  --border: #e5e7eb;
+  --accent: #3b82f6;
+  --accent-bg: rgba(59, 130, 246, 0.1);
+  --accent-border: rgba(59, 130, 246, 0.4);
+
+  --sans: system-ui, "Segoe UI", Roboto, sans-serif;
+
+  font-family: var(--sans);
+  color: var(--text);
+  background: var(--bg);
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ================= RESET ================= */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ================= BODY ================= */
+html, body {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  background: #f5f7fb;
+  color: var(--text);
+}
+
+/* ================= ROOT CONTAINER ================= */
+#root {
+  width: 100%;          /* 🔥 FULL WIDTH FIX */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ================= TYPOGRAPHY ================= */
+h1, h2, h3 {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+h1 {
+  font-size: 32px;
+}
+
+h2 {
+  font-size: 24px;
+}
+
+p {
+  color: #64748b;
+}
+
+/* ================= LINKS ================= */
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* ================= BUTTON RESET ================= */
+button {
+  font-family: inherit;
+}
+
+/* ================= SCROLLBAR (OPTIONAL PREMIUM) ================= */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5f5;
+  border-radius: 10px;
+}

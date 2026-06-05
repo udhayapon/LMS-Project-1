@@ -1,0 +1,132 @@
+/* =========================================================
+   TimetableBuilder.css — scoped under .tb
+   Covers the builder shell, tabs, Periods panel and Grid panel
+   ========================================================= */
+
+.tb {
+  --bg:#f4f6fb; --surface:#fff; --ink:#1e293b; --muted:#64748b; --line:#e6eaf2;
+  --primary:#3b5bff; --primary-d:#2f49d6; --fill:#eef2ff; --fill-bd:#c9d4ff;
+  --break:#f1f5f9; --danger:#e23b4e;
+
+  padding: 26px clamp(16px,3vw,40px) 48px;
+  background: var(--bg);
+  min-height: 100%;
+  color: var(--ink);
+  font-family: "Inter", sans-serif;
+}
+
+.tb-head h1 { font-size: 28px; font-weight: 700; letter-spacing:.03em; margin: 0; }
+.tb-head p { margin: 5px 0 18px; color: var(--muted); font-size: 15px; }
+
+/* tabs */
+.tb-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.tb-tabs button {
+  border: 1px solid var(--line); background: #fff; color: var(--muted);
+  font-weight: 700; font-size: 14px; padding: 9px 18px; border-radius: 10px; cursor: pointer;
+}
+.tb-tabs button.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+/* cards (periods panel) */
+.tb-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px 26px; margin-bottom: 20px; box-shadow: 0 12px 32px -24px rgba(30,41,59,.45); }
+.tb-card-title { font-size: 20px; font-weight: 700; margin: 0 0 18px; }
+
+.tb-form { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+.tb-field { display: flex; flex-direction: column; gap: 6px; }
+.tb-field span { font-size: 13px; font-weight: 600; color: var(--muted); }
+.tb-field input, .tb-field select {
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  font-size: 14px; font-family: inherit; color: var(--ink); background: #fbfcfe; min-width: 130px;
+}
+.tb-field input:focus, .tb-field select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,91,255,.15); }
+
+.tb-btn { border: none; background: #3b82f6; color: #fff; font-weight: 600; font-size: 14px; padding: 10px 14px; border-radius: 10px; cursor: pointer; transition: 0.2s; }
+.tb-btn:hover { opacity: 0.9; }
+.tb-btn:disabled { opacity:.6; cursor: not-allowed; }
+
+.tb-error { background:#fdecee; color:var(--danger); border:1px solid #f6c9cf; border-radius:10px; padding:10px 14px; font-size:13.5px; margin-top:14px; }
+.tb-hint { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+.tb-state { color: var(--muted); font-size: 15px; }
+
+/* periods table */
+.tb-list { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.tb-list th { text-align:left; font-size:17px; text-transform:uppercase; letter-spacing:.05em; color:black; padding:10px 12px; border-bottom:1px solid var(--line); }
+.tb-list td { padding:13px 12px; border-bottom:1px solid var(--line); font-size:15px; vertical-align: middle; }
+.tb-list tr:last-child td { border-bottom:none; }
+/* column widths: Period | Time | Type | Action */
+.tb-list th:nth-child(1), .tb-list td:nth-child(1) { width: 22%; }
+.tb-list th:nth-child(2), .tb-list td:nth-child(2) { width: 26%; }
+.tb-list th:nth-child(3), .tb-list td:nth-child(3) { width: 16%; }
+.tb-list th:nth-child(4), .tb-list td:nth-child(4) { width: 36%; }
+.tb-right { text-align: left; }
+.tb-right .tb-edit,
+.tb-right .tb-del,
+.tb-right .tb-btn,
+.tb-right .tb-cancel { vertical-align: middle; }
+
+/* action button group — keeps Edit/Delete (and Save/Cancel) neatly side by side */
+.tb-actions { display: flex; gap: 10px; align-items: center; }
+.tb-pill { font: size 20px; font-weight:600; padding:3px 11px; border-radius:15px; }
+.tb-pill.cls { background:var(--fill); color:var(--primary); }
+.tb-pill.brk { background:#fef3e2; color:#b45309; }
+.tb-del { border:none; background:#ef4444; color:#fff; font-weight:400; font-size:14px; cursor:pointer; padding:10px 14px; border-radius:10px; transition:0.2s; }
+.tb-del:hover { opacity:0.9; }
+
+/* edit button (next to delete) */
+.tb-edit { border:none; background:#4a4ce0; color:#fff; font-weight:400; font-size:14px; cursor:pointer; padding:10px 14px; border-radius:10px; transition:0.2s; }
+.tb-edit:hover { opacity:0.9; }
+
+/* small save button used in the inline edit row */
+.tb-btn-sm { padding:10px 14px; font-size:14px; }
+
+/* cancel button in the inline edit row */
+.tb-cancel { border:1px solid var(--line); background:#fff; color:var(--muted); font-weight:400; font-size:15px; cursor:pointer; padding:10px 14px; border-radius:10px; transition:0.2s; }
+.tb-cancel:hover { background:#f3f4f6; }
+
+/* inline edit fields inside a table cell */
+.tb-edit-cell { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.tb-edit-cell select, .tb-edit-cell input {
+  border:1px solid var(--line); border-radius:8px; padding:7px 9px; font-size:13px;
+  font-family:inherit; color:var(--ink); background:#fbfcfe;
+}
+.tb-edit-cell select:focus, .tb-edit-cell input:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(59,91,255,.15); }
+
+/* grid controls */
+.tb-controls { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:14px; }
+.tb-controls select { border:1px solid var(--line); border-radius:11px; padding:11px 14px; font-size:14.5px; font-family:inherit; background:#fff; color:var(--ink); min-width:180px; }
+.tb-controls select:disabled { opacity:.55; }
+.tb-controls select:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(59,91,255,.15); }
+
+.tb-empty { background:#fff; border:1px dashed var(--line); border-radius:14px; padding:40px; text-align:center; color:var(--muted); font-size:14.5px; }
+.tb-link { border:none; background:transparent; color:var(--primary); font-weight:700; font-size:14.5px; cursor:pointer; }
+.tb-link:hover { text-decoration: underline; }
+
+/* grid */
+.tb-wrap { overflow-x:auto; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:8px; box-shadow:0 12px 32px -24px rgba(30,41,59,.45); }
+.tb-grid { width:100%; border-collapse:separate; border-spacing:6px; min-width:820px; }
+.tb-grid th { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:700; padding:10px 6px; text-align:center; }
+.tb-corner { text-align:left !important; padding-left:12px !important; }
+.tb-per { width:104px; background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:10px; font-weight:700; font-size:14px; text-align:center; white-space:nowrap; }
+.tb-per span { display:block; margin-top:3px; font-size:11px; font-weight:500; color:var(--muted); }
+.tb-cell { border:1px solid var(--line); border-radius:10px; padding:0; height:66px; vertical-align:middle; text-align:center; background:#fcfdff; }
+
+.tb-blk { position:relative; background:var(--fill); border:1px solid var(--fill-bd); border-radius:9px; padding:9px 10px; margin:4px; text-align:left; }
+.tb-blk strong { display:block; font-size:12.5px; line-height:1.2; }
+.tb-blk small { display:block; margin-top:3px; font-size:11px; color:var(--muted); }
+.tb-x { position:absolute; top:3px; right:5px; border:none; background:transparent; color:var(--danger); font-size:15px; cursor:pointer; line-height:1; }
+.tb-x:hover { transform: scale(1.2); }
+
+.tb-pick { width:calc(100% - 8px); margin:4px; border:1px dashed var(--line); border-radius:8px; padding:8px; font-size:12px; color:var(--muted); background:transparent; cursor:pointer; }
+.tb-pick:hover { border-color:var(--primary); color:var(--primary); }
+.tb-pick:focus { outline:none; border-color:var(--primary); }
+
+.tb-brkrow td:not(.tb-per) { background:var(--break); border:1px dashed var(--line); border-radius:10px; color:var(--muted); font-size:12px; letter-spacing:.1em; text-transform:uppercase; text-align:center; }
+.tb-brkrow .tb-per { background:#fff7ed; }
+
+/* date inputs in the semester / holidays panel */
+.tb-field input[type="date"] { min-width: 160px; }
+
+.tb {
+  height: 100vh;
+  overflow-y: auto;
+}
+
