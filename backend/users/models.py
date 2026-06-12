@@ -46,6 +46,7 @@ class User(AbstractUser):
         ('student', 'Student'),
         ('teacher', 'Teacher'),
         ('admin', 'Admin'),
+        ('parent', 'Parent'),
     )
 
     # ================= ROLE =================
@@ -115,56 +116,39 @@ class User(AbstractUser):
         ):
 
             # ================= DEPARTMENT CODE =================
+            DEPT_CODES = {
+                "Computer Science": "CS",
+                "Information Technology": "IT",
+                "Electronics and Communication": "ECE",
+                "Electrical and Electronics": "EEE",
+                "Mechanical": "ME",
+                "Civil": "CE",
+                "Chemistry": "CH",
+                "Mathematics": "MA",
+            }
+
             if self.department:
-
-                dept_code = (
-                    self.department.name[:2]
-                    .upper()
-                )
-
+                dept_code = DEPT_CODES.get(self.department.name, "GN")
             else:
-
                 dept_code = "GN"
 
             # ================= FIND LAST STUDENT =================
             last_student = User.objects.filter(
-
                 role="student",
-
                 department=self.department,
+                roll_number__isnull=False,
+            ).order_by('-roll_number').first()
 
-                roll_number__isnull=False
-
-            ).order_by(
-                '-roll_number'
-            ).first()
-
-            # ================= START =================
+            # ================= COMPUTE NEXT NUMBER =================
             new_number = 1
-
-            # ================= GET LAST NUMBER =================
-            if (
-                last_student
-                and last_student.roll_number
-            ):
-
+            if last_student and last_student.roll_number:
                 try:
-
-                    last_number = int(
-                        last_student.roll_number[-3:]
-                    )
-
-                    new_number = (
-                        last_number + 1
-                    )
-
-                except:
+                    new_number = int(last_student.roll_number[-3:]) + 1
+                except (ValueError, TypeError):
                     pass
 
             # ================= FINAL ROLL NUMBER =================
-            self.roll_number = (
-                f"21{dept_code}{new_number:03d}"
-            )
+            self.roll_number = f"21{dept_code}{new_number:03d}"
 
         # ================= TEACHER EMPLOYEE ID =================
         if (
@@ -174,37 +158,40 @@ class User(AbstractUser):
 
             last_teacher = User.objects.filter(
                 role="teacher"
-            ).order_by(
-                '-employee_id'
-            ).first()
+            ).order_by('-employee_id').first()
 
             new_number = 1
-
-            if (
-                last_teacher
-                and last_teacher.employee_id
-            ):
-
+            if last_teacher and last_teacher.employee_id:
                 try:
-
-                    last_number = int(
-                        last_teacher.employee_id[-3:]
-                    )
-
-                    new_number = (
-                        last_number + 1
-                    )
-
-                except:
+                    new_number = int(last_teacher.employee_id[-3:]) + 1
+                except (ValueError, TypeError):
                     pass
 
-            self.employee_id = (
-                f"TCH{new_number:03d}"
-            )
+            self.employee_id = f"TCH{new_number:03d}"
 
         super().save(*args, **kwargs)
 
     # ================= STRING =================
     def __str__(self):
-
         return self.username
+
+
+# ================= PARENT PROFILE =================
+class ParentProfile(models.Model):
+
+    user = models.OneToOneField(
+        'users.User',
+        on_delete=models.CASCADE,
+        related_name='parent_profile',
+        limit_choices_to={'role': 'parent'},
+    )
+
+    children = models.ManyToManyField(
+        'users.User',
+        related_name='parents',
+        limit_choices_to={'role': 'student'},
+        blank=True,
+    )
+
+    def __str__(self):
+        return self.user.username

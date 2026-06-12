@@ -76,9 +76,59 @@ function getType(type = "") {
   if (t.includes("discussion") || t.includes("message")) return "discussion";
   if (t.includes("assignment") || t.includes("upload")) return "assignment";
   if (t.includes("quiz")) return "quiz";
-  if (t.includes("grade") || t.includes("mark"))return "marks";
+  if (t.includes("grade") || t.includes("mark")) return "marks";
   if (t.includes("announce")) return "announcement";
   return "default";
+}
+
+// ===== Decide where a notification should navigate, per role =====
+function routeForNotification(role, n) {
+  const type = (n.notification_type || "").toLowerCase();
+  const title = (n.title || "").toLowerCase();
+  const msg = (n.message || "").toLowerCase();
+  const ta = n.teaching_assignment; // teaching_assignment id, when present
+
+  // ---------------- STUDENT ----------------
+  if (role === "student") {
+    // "Marks Published" arrives as type 'assignment' — catch it by title
+    if (type === "marks" || title.includes("marks")) return "/student/grades";
+    // everything content-related lives inside the subject page
+    if (ta) return `/student/subject/${ta}`;
+    return "/student";
+  }
+
+  // ---------------- TEACHER ----------------
+  if (role === "teacher") {
+    // chat messages / broadcasts -> messages page
+    if (type === "announcement" || title.includes("message"))
+      return "/teacher/messages";
+    if (ta) return `/teacher/subject/${ta}`;
+    return "/teacher";
+  }
+
+  // ---------------- PARENT ----------------
+  if (role === "parent") {
+    if (type === "marks" || type === "quiz") return "/parent/grades";
+    if (type === "assignment") return "/parent/assignments";
+
+    // 'announcement' is overloaded (messages, fees, attendance alerts) —
+    // disambiguate by title/message text
+    if (type === "announcement") {
+      if (title.includes("fee") || msg.includes("fee")) return "/parent/fees";
+      if (
+        title.includes("absent") ||
+        title.includes("attendance") ||
+        title.includes("duty")
+      )
+        return "/parent/attendance";
+      return "/parent/chat"; // default: a chat message
+    }
+
+    // lecture / material / discussion have no dedicated parent page
+    return "/parent";
+  }
+
+  return null;
 }
 
 function timeAgo(dateStr) {
@@ -96,7 +146,7 @@ const TABS = [
   "Lecture",
   "Material",
   "Discussion",
-  "Marks"
+  "Marks",
 ];
 
 export default function Notifications() {
@@ -116,15 +166,6 @@ export default function Notifications() {
       console.error(err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const markRead = async (id) => {
-    try {
-      await API.post(`/notifications/${id}/mark_read/`);
-      fetchNotifications();
-    } catch (err) {
-      console.error(err);
     }
   };
 
@@ -155,44 +196,22 @@ export default function Notifications() {
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   const handleNotificationClick = async (notification) => {
-  try {
-    if (!notification.is_read) {
-      await API.post(
-        `/notifications/${notification.id}/mark_read/`
-      );
-    }
-
-    const user = JSON.parse(
-      localStorage.getItem("user")
-    );
-
-    const role = user?.role?.toLowerCase();
-
-    // Marks page
-    if (
-      notification.notification_type === "marks"
-    ) {
-      navigate("/student/grades");
-      return;
-    }
-
-    // Subject page
-    if (notification.teaching_assignment) {
-      if (role === "teacher") {
-        navigate(
-          `/teacher/subject/${notification.teaching_assignment}`
-        );
-      } else {
-        navigate(
-          `/student/subject/${notification.teaching_assignment}`
-        );
+    try {
+      if (!notification.is_read) {
+        await API.post(`/notifications/${notification.id}/mark_read/`);
+        fetchNotifications();
       }
-    }
 
-  } catch (err) {
-    console.error(err);
-  }
-};
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      const role = user?.role?.toLowerCase();
+
+      const path = routeForNotification(role, notification);
+      if (path) navigate(path);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <div className="app">
       <Navbar setOpen={setOpen} />
@@ -286,6 +305,7 @@ export default function Notifications() {
                         key={n.id}
                         className={`notif-item${n.is_read ? " read" : " unread"}`}
                         onClick={() => handleNotificationClick(n)}
+                        style={{ cursor: "pointer" }}
                       >
                         <div
                           className="notif-icon"

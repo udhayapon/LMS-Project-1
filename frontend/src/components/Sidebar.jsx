@@ -1,16 +1,8 @@
-import {
-  useNavigate,
-  useLocation
-} from "react-router-dom";
+import {useNavigate,useLocation} from "react-router-dom";
 
-import {
-  useState
-} from "react";
+import {useState} from "react";
 
-export default function Sidebar({
-  open,
-  setOpen
-}) {
+export default function Sidebar({open,setOpen}) {
 
   const navigate =
     useNavigate();
@@ -62,6 +54,12 @@ export default function Sidebar({
             name: "Admins",
             path: "/admins"
           },
+
+          {
+            name: "Parents",
+            path: "/parents-admin"
+          },
+
         ]
       },
 
@@ -81,6 +79,10 @@ export default function Sidebar({
       {
         name: "Enrollments",
         path: "/enrollments"
+      },
+
+      { name: "Fee Management", 
+        path: "/admin/fees"  
       },
       
       {
@@ -110,6 +112,20 @@ export default function Sidebar({
         name: "Timetable",
         path: "/timetable"
       },
+
+       {
+        name: "Attendance",
+        path: "/teacher/attendance"
+      },
+      {
+        name: "Student Progress",
+        path: "/teacher-progress"
+      },
+      
+      { name: "Messages", 
+        path: "/teacher/messages" 
+      },
+
       {
        name: "Feedback History",
        path: "/feedback"
@@ -148,12 +164,20 @@ export default function Sidebar({
         name: "Timetable",
         path: "/timetable"
       },
-
+      
+      {
+        name: "Attendance",
+        path: "/student/attendance"
+      },
+      
       {
         name: "Grades",
         path:"/student/grades"
       },
-
+      {
+        name: "My Progress",
+        path: "/student-progress"
+      },
       {
        name: "Feedback History",
        path: "/feedback"
@@ -163,10 +187,21 @@ export default function Sidebar({
         path: "/notifications"
       },
 
-      {
-        name: "Profile",
-        path: "/profile"
-      },
+      {name: "Profile",path: "/profile"},
+    ];
+  }
+
+  // ================= PARENT =================
+  else if (user.role === "parent") {
+    menu = [
+      { name: "Dashboard", path: "/parent" },
+      { name: "Grades", path: "/parent/grades" },
+      { name: "Attendance", path: "/parent/attendance" },
+      { name: "Assignments", path: "/parent/assignments" },
+      { name: "Fees", path: "/parent/fees" },
+      { name: "Messages", path: "/parent/chat" },
+      { name: "Notifications", path: "/notifications" },
+      { name: "Profile", path: "/profile" },
     ];
   }
 
@@ -212,6 +247,12 @@ export default function Sidebar({
         location.pathname === "/dashboard"
       );
     }
+
+    // ================= PARENT DASHBOARD =================
+if (path === "/parent") {
+  return location.pathname === "/parent";
+}
+
 
     // ================= NORMAL MATCH =================
     return (

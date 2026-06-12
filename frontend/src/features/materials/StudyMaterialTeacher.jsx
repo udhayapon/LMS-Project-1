@@ -1,290 +1,310 @@
 import { useEffect, useState } from "react";
 import API from "../../api";
 
-export default function StudyMaterialTeacher({
-  teachingId,
-}) {
+export default function StudyMaterialTeacher({ teachingId }) {
 
-  const [materials, setMaterials] =
-    useState([]);
+  // ================= FOLDER STATES =================
+  const [folders, setFolders] = useState([]);
+  const [openFolder, setOpenFolder] = useState(null); // null = folder grid
+  const [newFolder, setNewFolder] = useState("");
 
-  const [showForm, setShowForm] =
-    useState(false);
+  // ================= FILE STATES =================
+  const [materials, setMaterials] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const [editingId, setEditingId] =
-    useState(null);
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    file: null,
+  });
 
-  const [loading, setLoading] =
-    useState(false);
-
-  const [form, setForm] =
-    useState({
-      title: "",
-      description: "",
-      file: null,
-    });
-
-  // ================= FETCH =================
-  const fetchMaterials = async () => {
-
+  // ================= FETCH FOLDERS =================
+  const fetchFolders = async () => {
     try {
-
       const res = await API.get(
-        `/study-materials/?teaching_assignment=${teachingId}`
+        `/material-folders/?teaching_assignment=${teachingId}`
       );
-
-      setMaterials(
-        res.data?.results ||
-        res.data ||
-        []
-      );
-
+      setFolders(res.data?.results || res.data || []);
     } catch (err) {
+      console.log("Folder fetch error:", err);
+    }
+  };
 
-      console.log(
-        "Material fetch error:",
-        err
+  // ================= FETCH FILES IN FOLDER =================
+  const fetchMaterials = async (folderId) => {
+    try {
+      const res = await API.get(
+        `/study-materials/?teaching_assignment=${teachingId}&folder=${folderId}`
       );
+      setMaterials(res.data?.results || res.data || []);
+    } catch (err) {
+      console.log("Material fetch error:", err);
     }
   };
 
   useEffect(() => {
-
-    if (teachingId) {
-
-      fetchMaterials();
-    }
-
+    if (teachingId) fetchFolders();
   }, [teachingId]);
 
-  // ================= INPUT =================
-  const handleChange = (e) => {
-
-    setForm({
-
-      ...form,
-
-      [e.target.name]:
-        e.target.value,
-    });
+  // ================= CREATE FOLDER =================
+  const createFolder = async () => {
+    if (!newFolder.trim()) return alert("Folder name is required");
+    try {
+      await API.post("/material-folders/", {
+        name: newFolder,
+        teaching_assignment: teachingId,
+      });
+      setNewFolder("");
+      fetchFolders();
+      alert("Folder created");
+    } catch (err) {
+      console.log(err);
+      // unique_together → duplicate name
+      if (err.response?.data?.non_field_errors) {
+        alert("A folder with that name already exists");
+      } else {
+        alert("Could not create folder");
+      }
+    }
   };
 
-  // ================= FILE =================
-  const handleFileChange = (e) => {
-
-    setForm({
-
-      ...form,
-
-      file:
-        e.target.files[0],
-    });
+  // ================= DELETE FOLDER =================
+  const deleteFolder = async (folder) => {
+    const ok = window.confirm(
+      `Delete "${folder.name}" and ALL files inside it? This cannot be undone.`
+    );
+    if (!ok) return;
+    try {
+      await API.delete(`/material-folders/${folder.id}/`);
+      fetchFolders();
+      alert("Folder deleted");
+    } catch (err) {
+      console.log(err);
+      alert("Delete failed");
+    }
   };
 
-  // ================= RESET =================
+  // ================= OPEN / BACK =================
+  const handleOpenFolder = (folder) => {
+    setOpenFolder(folder);
+    setShowForm(false);
+    resetForm();
+    fetchMaterials(folder.id);
+  };
+
+  const handleBack = () => {
+    setOpenFolder(null);
+    setMaterials([]);
+    fetchFolders(); // refresh file counts
+  };
+
+  // ================= FORM HELPERS =================
+  const handleChange = (e) =>
+    setForm({ ...form, [e.target.name]: e.target.value });
+
+  const handleFileChange = (e) =>
+    setForm({ ...form, file: e.target.files[0] });
+
   const resetForm = () => {
-
-    setForm({
-      title: "",
-      description: "",
-      file: null,
-    });
-
+    setForm({ title: "", description: "", file: null });
     setEditingId(null);
-
     setShowForm(false);
   };
 
-  // ================= SAVE =================
+  // ================= SAVE FILE =================
   const saveMaterial = async () => {
-
-    if (!form.title.trim()) {
-
-      return alert(
-        "Title is required"
-      );
-    }
-
-    if (!editingId && !form.file) {
-
-      return alert(
-        "Please upload a file"
-      );
-    }
+    if (!form.title.trim()) return alert("Title is required");
+    if (!editingId && !form.file) return alert("Please upload a file");
 
     try {
-
       setLoading(true);
 
       const fd = new FormData();
+      fd.append("title", form.title);
+      fd.append("description", form.description);
+      fd.append("teaching_assignment", teachingId);
+      fd.append("folder", openFolder.id); // file belongs to this folder
+      if (form.file) fd.append("file", form.file);
 
-      fd.append(
-        "title",
-        form.title
-      );
-
-      fd.append(
-        "description",
-        form.description
-      );
-
-      fd.append(
-        "teaching_assignment",
-        teachingId
-      );
-
-      if (form.file) {
-
-        fd.append(
-          "file",
-          form.file
-        );
-      }
-
-      // UPDATE
       if (editingId) {
-
-        await API.patch(
-          `/study-materials/${editingId}/`,
-          fd,
-          {
-            headers: {
-              "Content-Type":
-                "multipart/form-data",
-            },
-          }
-        );
-
-        alert(
-          "Material updated"
-        );
-
-      }
-
-      // CREATE
-      else {
-
-        await API.post(
-          "/study-materials/",
-          fd,
-          {
-            headers: {
-              "Content-Type":
-                "multipart/form-data",
-            },
-          }
-        );
-
-        alert(
-          "Material uploaded"
-        );
+        await API.patch(`/study-materials/${editingId}/`, fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        alert("Material updated");
+      } else {
+        await API.post("/study-materials/", fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        alert("Material uploaded");
       }
 
       resetForm();
-
-      fetchMaterials();
-
+      fetchMaterials(openFolder.id);
     } catch (err) {
-
       console.log(err);
-
-      alert(
-        "Operation failed"
-      );
-
+      alert("Operation failed");
     } finally {
-
       setLoading(false);
     }
   };
 
-  // ================= EDIT =================
-  const editMaterial = (material) => {
-
-    setEditingId(material.id);
-
+  // ================= EDIT / DELETE FILE =================
+  const editMaterial = (m) => {
+    setEditingId(m.id);
     setShowForm(true);
-
     setForm({
-
-      title:
-        material.title || "",
-
-      description:
-        material.description || "",
-
+      title: m.title || "",
+      description: m.description || "",
       file: null,
     });
   };
 
-  // ================= DELETE =================
   const deleteMaterial = async (id) => {
-
-    const confirmDelete =
-      window.confirm(
-        "Delete this material?"
-      );
-
-    if (!confirmDelete) return;
-
+    if (!window.confirm("Delete this material?")) return;
     try {
-
-      await API.delete(
-        `/study-materials/${id}/`
-      );
-
-      alert(
-        "Material deleted"
-      );
-
-      fetchMaterials();
-
+      await API.delete(`/study-materials/${id}/`);
+      alert("Material deleted");
+      fetchMaterials(openFolder.id);
     } catch (err) {
-
       console.log(err);
-
-      alert(
-        "Delete failed"
-      );
+      alert("Delete failed");
     }
   };
 
+  // ================= FOLDER GRID VIEW =================
+  if (!openFolder) {
+    return (
+      <div className="card">
+        <div style={{ marginBottom: "20px" }}>
+          <h3>Study Materials</h3>
+          <p>Create folders and upload files into them</p>
+        </div>
+
+        {/* create folder */}
+        <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+          <input
+            type="text"
+            placeholder="New folder name (e.g. Question Bank)"
+            value={newFolder}
+            onChange={(e) => setNewFolder(e.target.value)}
+            style={{ flex: 1, maxWidth: "320px" }}
+          />
+          <button className="btn-primary" onClick={createFolder}>
+            + Create Folder
+          </button>
+        </div>
+
+        {folders.length === 0 ? (
+          <p>No folders yet. Create one to start uploading.</p>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(auto-fill, minmax(190px, 1fr))",
+              gap: "16px",
+            }}
+          >
+            {folders.map((f) => (
+              <div
+                key={f.id}
+                style={{
+                  position: "relative",
+                  background: "#f8fafc",
+                  border: "1px solid #e6eaf2",
+                  borderRadius: "14px",
+                  padding: "20px 18px",
+                  cursor: "pointer",
+                }}
+                onClick={() => handleOpenFolder(f)}
+              >
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteFolder(f);
+                  }}
+                  style={{
+                    position: "absolute",
+                    top: "10px",
+                    right: "10px",
+                    background: "#fee2e2",
+                    color: "#dc2626",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "4px 8px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Delete
+                </button>
+
+                <div style={{ fontSize: "34px", lineHeight: 1 }}>📁</div>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: "15px",
+                    marginTop: "12px",
+                  }}
+                >
+                  {f.name}
+                </div>
+                <div
+                  style={{
+                    fontSize: "12.5px",
+                    color: "#64748b",
+                    marginTop: "3px",
+                  }}
+                >
+                  {f.file_count} file{f.file_count === 1 ? "" : "s"}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ================= INSIDE A FOLDER =================
   return (
     <div className="card">
 
-      {/* ================= HEADER ================= */}
+      {/* breadcrumb */}
+      <div style={{ marginBottom: "16px", fontSize: "14px", color: "#64748b" }}>
+        <span
+          onClick={handleBack}
+          style={{ color: "#3b82f6", fontWeight: 600, cursor: "pointer" }}
+        >
+          Study Materials
+        </span>
+        {"  ›  "}
+        <strong style={{ color: "#1e293b" }}>{openFolder.name}</strong>
+      </div>
+
+      {/* header */}
       <div
         style={{
           display: "flex",
-          justifyContent:
-            "space-between",
+          justifyContent: "space-between",
           alignItems: "center",
           marginBottom: "20px",
         }}
       >
-
-        <h3>
-          Study Materials
-        </h3>
-
+        <h3>{openFolder.name}</h3>
         <button
           className="btn-primary"
-          onClick={() =>
-            setShowForm(!showForm)
-          }
+          onClick={() => setShowForm(!showForm)}
         >
-
-          {showForm
-            ? "Cancel"
-            : "+ Add Material"}
-
+          {showForm ? "Cancel" : "+ Add File"}
         </button>
-
       </div>
 
-      {/* ================= FORM ================= */}
+      {/* upload form */}
       {showForm && (
-
         <div
           style={{
             display: "flex",
@@ -293,17 +313,13 @@ export default function StudyMaterialTeacher({
             marginBottom: "20px",
           }}
         >
-
-          {/* TITLE */}
           <input
             type="text"
             name="title"
-            placeholder="Material Title"
+            placeholder="File Title"
             value={form.title}
             onChange={handleChange}
           />
-
-          {/* DESCRIPTION */}
           <textarea
             name="description"
             placeholder="Description"
@@ -311,96 +327,52 @@ export default function StudyMaterialTeacher({
             value={form.description}
             onChange={handleChange}
           />
-
-          {/* FILE */}
           <input
             type="file"
             accept=".pdf,.ppt,.pptx,.doc,.docx,.txt"
             onChange={handleFileChange}
           />
-
-          {/* BUTTON */}
           <button
             className="btn-primary"
             onClick={saveMaterial}
             disabled={loading}
           >
-
             {loading
               ? "Saving..."
               : editingId
-              ? "Update Material"
-              : "Upload Material"}
-
+              ? "Update File"
+              : `Upload to ${openFolder.name}`}
           </button>
-
         </div>
-
       )}
 
-      {/* ================= TABLE ================= */}
+      {/* file table */}
       {materials.length === 0 ? (
-
-        <p>
-          No study materials uploaded
-        </p>
-
+        <p>No files in this folder</p>
       ) : (
-
-        <div
-          style={{
-            overflowX: "auto",
-          }}
-        >
-
+        <div style={{ overflowX: "auto" }}>
           <table>
-
             <thead>
-
               <tr>
-
                 <th>Title</th>
-
                 <th>Description</th>
-
                 <th>Uploaded By</th>
-
                 <th>Created</th>
-
                 <th>Actions</th>
-
               </tr>
-
             </thead>
-
             <tbody>
-
               {materials.map((m) => (
-
                 <tr key={m.id}>
-
-                  <td>
-                    {m.title}
-                  </td>
-
-                  <td>
-                    {m.description || "-"}
-                  </td>
-
-                  <td>
-                    {m.uploaded_by_name}
-                  </td>
-
+                  <td>{m.title}</td>
+                  <td>{m.description || "-"}</td>
+                  <td>{m.uploaded_by_name}</td>
                   <td>
                     {m.created_at
-                      ? new Date(
-                          m.created_at
-                        ).toLocaleDateString()
+                      ? new Date(m.created_at).toLocaleDateString()
                       : "-"}
                   </td>
-
                   <td>
-
                     <div
                       style={{
                         display: "flex",
@@ -408,49 +380,25 @@ export default function StudyMaterialTeacher({
                         flexWrap: "wrap",
                       }}
                     >
-
-                      {/* VIEW */}
                       {m.file && (
-
-                        <a
-                          href={m.file}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-
-                          <button>
-                            View
-                          </button>
-
+                        <a href={m.file} target="_blank" rel="noreferrer">
+                          <button>View</button>
                         </a>
-
                       )}
-
-                      {/* EDIT */}
                       <button
                         className="btn-primary"
-                        onClick={() =>
-                          editMaterial(m)
-                        }
+                        onClick={() => editMaterial(m)}
                       >
                         Edit
                       </button>
-
-                      {/* DELETE */}
                       <button
-                        onClick={() =>
-                          deleteMaterial(
-                            m.id
-                          )
-                        }
+                        onClick={() => deleteMaterial(m.id)}
                         style={{
                           background: "red",
                           color: "white",
                           border: "none",
-                          padding:
-                            "8px 12px",
-                          borderRadius:
-                            "6px",
+                          padding: "8px 12px",
+                          borderRadius: "6px",
                           cursor: "pointer",
                         }}
                       >
@@ -458,21 +406,14 @@ export default function StudyMaterialTeacher({
                       </button>
 
                     </div>
-
+                    
                   </td>
-
                 </tr>
-
               ))}
-
             </tbody>
-
           </table>
-
         </div>
-
       )}
-
     </div>
   );
 }

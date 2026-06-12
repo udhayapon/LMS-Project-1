@@ -260,9 +260,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
 
 
 # ===================== SUBMISSION =====================
-class SubmissionSerializer(
-    serializers.ModelSerializer
-):
+class SubmissionSerializer(serializers.ModelSerializer):
 
     # ================= STUDENT =================
     student_name = serializers.CharField(
@@ -479,9 +477,7 @@ class StudyMaterialSerializer(
 
 
 # ===================== NOTIFICATION =====================
-class NotificationSerializer(
-    serializers.ModelSerializer
-):
+class NotificationSerializer(serializers.ModelSerializer):
 
     recipient_name = serializers.CharField(
         source='recipient.username',
@@ -499,9 +495,7 @@ class NotificationSerializer(
         ]
 
 # ===================== DISCUSSION MESSAGE =====================
-class DiscussionMessageSerializer(
-    serializers.ModelSerializer
-):
+class DiscussionMessageSerializer(serializers.ModelSerializer):
 
     user_name = serializers.CharField(
         source='user.username',
@@ -569,3 +563,75 @@ class FeedbackSerializer(serializers.ModelSerializer):
             "direction",
             "created_at",
         ]
+
+# ===================== MATERIAL FOLDER =====================
+class MaterialFolderSerializer(serializers.ModelSerializer):
+ 
+    created_by_name = serializers.CharField(
+        source="created_by.username",
+        read_only=True
+    )
+ 
+    # how many files are inside this folder (for the folder card)
+    file_count = serializers.IntegerField(
+        source="materials.count",
+        read_only=True
+    )
+ 
+    class Meta:
+        model = MaterialFolder
+        fields = [
+            "id",
+            "name",
+            "teaching_assignment",
+            "created_by",
+            "created_by_name",
+            "file_count",
+            "created_at",
+        ]
+        read_only_fields = ["created_by", "created_at"]
+
+
+# ===================== FEE =====================
+class FeeSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(
+        source='student.username', read_only=True)
+    department = serializers.SerializerMethodField()
+    pending_amount = serializers.SerializerMethodField()
+
+    def get_department(self, obj):
+        course = getattr(obj.student, 'course', None)
+        return course.name if course else None
+
+    def get_pending_amount(self, obj):
+        return float(obj.amount) - float(obj.paid_amount)
+
+    class Meta:
+        model = Fee
+        fields = ['id', 'student', 'student_name', 'department', 'term',
+                  'amount', 'paid_amount', 'pending_amount',
+                  'due_date', 'paid_date', 'status', 'created_at']
+        read_only_fields = ['created_at']
+
+# ===================== PARENT MESSAGE =====================
+class ParentMessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.CharField(source='sender.username', read_only=True)
+    receiver_name = serializers.CharField(source='receiver.username', read_only=True)
+
+    class Meta:
+        model = ParentMessage
+        fields = ['id', 'sender', 'sender_name', 'receiver',
+                  'receiver_name', 'text', 'is_read', 'created_at']
+        read_only_fields = ['sender', 'created_at']
+
+# ===================== CONVERSATION MESSAGE =====================
+class ConversationMessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.CharField(source='sender.username', read_only=True)
+    receiver_name = serializers.CharField(source='receiver.username', read_only=True)
+
+    class Meta:
+        model = ConversationMessage
+        fields = ['id', 'sender', 'sender_name', 'receiver',
+                  'receiver_name', 'text', 'is_read', 'created_at']
+        read_only_fields = ['sender', 'created_at']
+        

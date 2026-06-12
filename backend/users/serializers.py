@@ -1,15 +1,9 @@
 from rest_framework import serializers
 
-from .models import (
-    User,
-    Department
-)
-
+from .models import (User,Department)
 
 # ================= DEPARTMENT =================
-class DepartmentSerializer(
-    serializers.ModelSerializer
-):
+class DepartmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Department
@@ -20,9 +14,7 @@ class DepartmentSerializer(
 
 
 # ================= USER =================
-class UserSerializer(
-    serializers.ModelSerializer
-):
+class UserSerializer(serializers.ModelSerializer):
 
     # ================= DEPARTMENT NAME =================
     department_name = serializers.CharField(
@@ -80,44 +72,28 @@ class UserSerializer(
         }
 
     # ================= DEPARTMENT CODE METHOD =================
-    def get_department_code(
-        self,
-        obj
-    ):
+    def get_department_code( self, obj):
 
         if obj.department:
 
-            return (
-                obj.department.name[:3]
-                .upper()
-            )
+            return ( obj.department.name[:3].upper())
 
         return ""
 
     # ================= VALIDATE USERNAME =================
-    def validate_username(
-        self,
-        value
-    ):
+    def validate_username(self,value):
 
         if not value:
 
-            raise serializers.ValidationError(
-                "Username is required"
-            )
+            raise serializers.ValidationError("Username is required" )
 
         return value
 
     # ================= VALIDATE EMAIL =================
-    def validate_email(
-        self,
-        value
-    ):
+    def validate_email(self,value ):
 
         if not value:
-            raise serializers.ValidationError(
-                "Email is required"
-            )
+            raise serializers.ValidationError( "Email is required")
 
         user = self.instance
 
@@ -129,9 +105,7 @@ class UserSerializer(
                 id=user.id
             ).exists():
 
-                raise serializers.ValidationError(
-                    "Email already exists"
-                )
+                raise serializers.ValidationError("Email already exists" )
 
         else:
 
@@ -139,17 +113,12 @@ class UserSerializer(
                 email=value
             ).exists():
 
-                raise serializers.ValidationError(
-                    "Email already exists"
-                )
+                raise serializers.ValidationError( "Email already exists" )
 
         return value
 
     # ================= VALIDATE ROLE =================
-    def validate_role(
-        self,
-        value
-    ):
+    def validate_role(  self, value):
 
         valid_roles = [
             'student',
@@ -159,17 +128,12 @@ class UserSerializer(
 
         if value not in valid_roles:
 
-            raise serializers.ValidationError(
-                "Invalid role"
-            )
+            raise serializers.ValidationError("Invalid role" )
 
         return value
 
     # ================= CREATE USER =================
-    def create(
-        self,
-        validated_data
-    ):
+    def create(self,validated_data):
 
         password = validated_data.pop(
             'password',
@@ -197,11 +161,7 @@ class UserSerializer(
         return user
 
     # ================= UPDATE USER =================
-    def update(
-        self,
-        instance,
-        validated_data
-    ):
+    def update(self,instance,validated_data ):
 
         password = validated_data.pop(
             'password',

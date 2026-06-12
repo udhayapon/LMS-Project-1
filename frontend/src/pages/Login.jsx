@@ -51,6 +51,10 @@ function Login() {
       else if (role === "student") {
         navigate("/student");     // STUDENT
       } 
+      else if (role === "parent") {
+  navigate("/parent");
+}
+
       else {
         console.log("Unknown role:", data);
         setError("Invalid role");

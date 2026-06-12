@@ -34,6 +34,12 @@ urlpatterns = [
         'api-auth/',
         include('rest_framework.urls')
     ),
+
+    path(
+        'api/',
+        include('attendance.urls')
+    ),
+
 ]
 
 # ================= MEDIA FILES =================

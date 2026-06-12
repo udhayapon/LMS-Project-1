@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Select from "react-select";
 
 import Sidebar from "../../components/Sidebar";
 import Navbar from "../../components/Navbar";
@@ -9,286 +10,166 @@ import "../../App.css";
 
 export default function TeachingAssignments() {
 
-  const [open, setOpen] =
-    useState(false);
+  const [open, setOpen] = useState(false);
 
-  const [courses, setCourses] =
-    useState([]);
+  const [courses, setCourses] = useState([]);
+  const [years, setYears] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+  const [assignments, setAssignments] = useState([]);
 
-  const [years, setYears] =
-    useState([]);
+  const [form, setForm] = useState({
+    course: "",
+    year: "",
+    subject: "",
+    teacher: "",
+  });
 
-  const [subjects, setSubjects] =
-    useState([]);
+  const [editId, setEditId] = useState(null);
 
-  const [teachers, setTeachers] =
-    useState([]);
-
-  const [assignments, setAssignments] =
-    useState([]);
-
-  const [form, setForm] =
-    useState({
-      course: "",
-      year: "",
-      subject: "",
-      teacher: "",
-    });
-
-  const [editId, setEditId] =
-    useState(null);
+  // ✅ course filter for the table
+  const [courseFilter, setCourseFilter] = useState("all");
 
   // ================= LOAD =================
   useEffect(() => {
-
     fetchData();
-
   }, []);
 
   // ================= FETCH =================
   const fetchData = async () => {
-
     try {
-
-      const [c, y, s, u, a] =
-        await Promise.all([
-
-          API.get("/courses/"),
-
-          API.get("/years/"),
-
-          API.get("/subjects/"),
-
-          API.get("/users/"),
-
-          API.get(
-            "/teaching-assignments/"
-          ),
-
-        ]);
+      const [c, y, s, u, a] = await Promise.all([
+        API.get("/courses/"),
+        API.get("/years/"),
+        API.get("/subjects/"),
+        API.get("/users/"),
+        API.get("/teaching-assignments/"),
+      ]);
 
       // ================= FILTER TEACHERS =================
-      const teachersOnly =
-        (
-          u.data?.results ||
-          u.data ||
-          []
-        ).filter(
-          (user) =>
-            user.role === "teacher"
-        );
-
-      setCourses(
-        c.data?.results ||
-        c.data ||
-        []
+      const teachersOnly = (u.data?.results || u.data || []).filter(
+        (user) => user.role === "teacher"
       );
 
-      setYears(
-        y.data?.results ||
-        y.data ||
-        []
-      );
-
-      setSubjects(
-        s.data?.results ||
-        s.data ||
-        []
-      );
-
-      setTeachers(
-        teachersOnly
-      );
-
-      setAssignments(
-        a.data?.results ||
-        a.data ||
-        []
-      );
-
+      setCourses(c.data?.results || c.data || []);
+      setYears(y.data?.results || y.data || []);
+      setSubjects(s.data?.results || s.data || []);
+      setTeachers(teachersOnly);
+      setAssignments(a.data?.results || a.data || []);
     } catch (err) {
-
-      console.error(
-        "Fetch error:",
-        err.response?.data ||
-        err
-      );
+      console.error("Fetch error:", err.response?.data || err);
     }
   };
 
   // ================= FILTER YEARS =================
-  const filteredYears =
-    years.filter(
-      (y) =>
-        Number(y.course) ===
-        Number(form.course)
-    );
+  const filteredYears = years.filter(
+    (y) => Number(y.course) === Number(form.course)
+  );
 
   // ================= FILTER SUBJECTS =================
-  const filteredSubjects =
-    subjects.filter(
-      (s) =>
-        Number(s.year) ===
-        Number(form.year)
+  const filteredSubjects = subjects.filter((s) => {
+    // Subject must belong to selected year
+    if (Number(s.year) !== Number(form.year)) {
+      return false;
+    }
+
+    // During edit mode, show current subject
+    if (editId && Number(s.id) === Number(form.subject)) {
+      return true;
+    }
+
+    // Hide already assigned subjects
+    const alreadyAssigned = assignments.some(
+      (a) =>
+        Number(a.course) === Number(form.course) &&
+        Number(a.year) === Number(form.year) &&
+        Number(a.subject) === Number(s.id) &&
+        Number(a.id) !== Number(editId)
     );
+
+    return !alreadyAssigned;
+  });
+
+  // ================= FILTER ASSIGNMENTS BY COURSE =================
+  const filteredAssignments =
+    courseFilter === "all"
+      ? assignments
+      : assignments.filter(
+          (a) => String(a.course) === String(courseFilter)
+        );
 
   // ================= EDIT =================
   const handleEdit = (a) => {
-
     setForm({
-
       course: a.course,
-
       year: a.year,
-
       subject: a.subject,
-
       teacher: a.teacher,
-
     });
-
     setEditId(a.id);
   };
 
   // ================= CREATE / UPDATE =================
-  const handleAssign =
-    async () => {
+  const handleAssign = async () => {
+    if (!form.course || !form.year || !form.subject || !form.teacher) {
+      alert("Please fill all fields");
+      return;
+    }
 
-      if (
-        !form.course ||
-        !form.year ||
-        !form.subject ||
-        !form.teacher
-      ) {
-
-        alert(
-          "Please fill all fields"
+    try {
+      // ================= UPDATE =================
+      if (editId) {
+        await API.put(`/teaching-assignments/${editId}/`, form);
+        alert("Updated successfully");
+      } else {
+        // ================= CHECK DUPLICATE =================
+        const exists = assignments.find(
+          (a) =>
+            Number(a.course) === Number(form.course) &&
+            Number(a.year) === Number(form.year) &&
+            Number(a.subject) === Number(form.subject) &&
+            Number(a.teacher) === Number(form.teacher)
         );
 
-        return;
-      }
-
-      try {
-
-        // ================= UPDATE =================
-        if (editId) {
-
-          await API.put(
-            `/teaching-assignments/${editId}/`,
-            form
-          );
-
-          alert(
-            "Updated successfully"
-          );
-
-        } else {
-
-          // ================= CHECK DUPLICATE =================
-          const exists =
-            assignments.find(
-              (a) =>
-
-                Number(a.course)
-                ===
-                Number(form.course)
-
-                &&
-
-                Number(a.year)
-                ===
-                Number(form.year)
-
-                &&
-
-                Number(a.subject)
-                ===
-                Number(form.subject)
-
-                &&
-
-                Number(a.teacher)
-                ===
-                Number(form.teacher)
-            );
-
-          if (exists) {
-
-            alert(
-              "This assignment already exists"
-            );
-
-            return;
-          }
-
-          // ================= CREATE =================
-          await API.post(
-            "/teaching-assignments/",
-            form
-          );
-
-          alert(
-            "Assigned successfully"
-          );
+        if (exists) {
+          alert("This assignment already exists");
+          return;
         }
 
-        // ================= RESET =================
-        setForm({
-
-          course: "",
-
-          year: "",
-
-          subject: "",
-
-          teacher: "",
-
-        });
-
-        setEditId(null);
-
-        fetchData();
-
-      } catch (err) {
-
-        console.error(
-          err.response?.data ||
-          err
-        );
-
-        alert(
-          "Operation failed"
-        );
+        // ================= CREATE =================
+        await API.post("/teaching-assignments/", form);
+        alert("Assigned successfully");
       }
-    };
+
+      // ================= RESET =================
+      setForm({
+        course: "",
+        year: "",
+        subject: "",
+        teacher: "",
+      });
+
+      setEditId(null);
+      fetchData();
+    } catch (err) {
+      console.error(err.response?.data || err);
+      alert("Operation failed");
+    }
+  };
 
   // ================= DELETE =================
-  const handleDelete =
-    async (id) => {
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this assignment?")) {
+      return;
+    }
 
-      if (
-        !window.confirm(
-          "Delete this assignment?"
-        )
-      ) {
-        return;
-      }
-
-      try {
-
-        await API.delete(
-          `/teaching-assignments/${id}/`
-        );
-
-        fetchData();
-
-      } catch (err) {
-
-        alert(
-          "Delete failed"
-        );
-      }
-    };
+    try {
+      await API.delete(`/teaching-assignments/${id}/`);
+      fetchData();
+    } catch (err) {
+      alert("Delete failed");
+    }
+  };
 
   // ================= UI =================
   return (
@@ -300,10 +181,7 @@ export default function TeachingAssignments() {
       <div className="layout">
 
         {/* SIDEBAR */}
-        <Sidebar
-          open={open}
-          setOpen={setOpen}
-        />
+        <Sidebar open={open} setOpen={setOpen} />
 
         {/* MAIN */}
         <div className="main">
@@ -312,15 +190,8 @@ export default function TeachingAssignments() {
 
             {/* ================= HEADER ================= */}
             <div className="header-box">
-
-              <h2>
-                Faculty Allocation  
-              </h2>
-
-              <p>
-                Assign teachers to subjects and semesters
-              </p>
-
+              <h2>Faculty Allocation</h2>
+              <p>Assign teachers to subjects and semesters</p>
             </div>
 
             {/* ================= FORM ================= */}
@@ -333,35 +204,19 @@ export default function TeachingAssignments() {
                   value={form.course}
                   onChange={(e) =>
                     setForm({
-
                       ...form,
-
-                      course: Number(
-                        e.target.value
-                      ),
-
+                      course: Number(e.target.value),
                       year: "",
-
                       subject: "",
                     })
                   }
                 >
-
-                  <option value="">
-                    Select Course
-                  </option>
-
+                  <option value="">Select Course</option>
                   {courses.map((c) => (
-
-                    <option
-                      key={c.id}
-                      value={c.id}
-                    >
+                    <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
-
                   ))}
-
                 </select>
 
                 {/* YEAR */}
@@ -369,33 +224,18 @@ export default function TeachingAssignments() {
                   value={form.year}
                   onChange={(e) =>
                     setForm({
-
                       ...form,
-
-                      year: Number(
-                        e.target.value
-                      ),
-
+                      year: Number(e.target.value),
                       subject: "",
                     })
                   }
                 >
-
-                  <option value="">
-                    Select Year
-                  </option>
-
+                  <option value="">Select Year</option>
                   {filteredYears.map((y) => (
-
-                    <option
-                      key={y.id}
-                      value={y.id}
-                    >
+                    <option key={y.id} value={y.id}>
                       Year {y.year_number}
                     </option>
-
                   ))}
-
                 </select>
 
                 {/* SUBJECT */}
@@ -403,109 +243,66 @@ export default function TeachingAssignments() {
                   value={form.subject}
                   onChange={(e) =>
                     setForm({
-
                       ...form,
-
-                      subject: Number(
-                        e.target.value
-                      ),
+                      subject: Number(e.target.value),
                     })
                   }
                 >
-
-                  <option value="">
-                    Select Subject
-                  </option>
-
+                  <option value="">Select Subject</option>
                   {filteredSubjects.map((s) => (
-
-                    <option
-                      key={s.id}
-                      value={s.id}
-                    >
-                      {s.name}
-                      {" "}
-                      (
-                      Semester {s.semester}
-                      )
+                    <option key={s.id} value={s.id}>
+                      {s.name} (Semester {s.semester})
                     </option>
-
                   ))}
-
                 </select>
 
                 {/* TEACHER */}
-                <select
-                  value={form.teacher}
-                  onChange={(e) =>
+                <Select
+                  className="teacher-select"
+                  classNamePrefix="teacher-select"
+                  placeholder="Select Teacher"
+                  isSearchable
+                  options={teachers.map((t) => ({
+                    value: t.id,
+                    label: `${t.username} (${t.department_name})`,
+                  }))}
+                  value={
+                    teachers
+                      .filter((t) => t.id === form.teacher)
+                      .map((t) => ({
+                        value: t.id,
+                        label: `${t.username} (${t.department_name})`,
+                      }))[0] || null
+                  }
+                  onChange={(selected) =>
                     setForm({
-
                       ...form,
-
-                      teacher: Number(
-                        e.target.value
-                      ),
+                      teacher: selected ? selected.value : "",
                     })
                   }
-                >
-
-                  <option value="">
-                    Select Teacher
-                  </option>
-
-                  {teachers.map((t) => (
-
-                    <option
-                      key={t.id}
-                      value={t.id}
-                    >
-                      {t.username}
-                      (
-                      {t.department_name}
-                      )
-                    </option>
-
-                  ))}
-
-                </select>
+                />
 
                 {/* BUTTON */}
-                <button
-                  className="btn-primary"
-                  onClick={handleAssign}
-                >
-
-                  {editId
-                    ? "Update"
-                    : "Assign"}
-
+                <button className="btn-primary" onClick={handleAssign}>
+                  {editId ? "Update" : "Assign"}
                 </button>
 
                 {/* CANCEL */}
                 {editId && (
-
                   <button
                     className="btn-delete"
                     onClick={() => {
-
                       setEditId(null);
-
                       setForm({
-
                         course: "",
-
                         year: "",
-
                         subject: "",
-
                         teacher: "",
-
                       });
                     }}
                   >
                     Cancel
                   </button>
-
                 )}
 
               </div>
@@ -515,88 +312,70 @@ export default function TeachingAssignments() {
             {/* ================= TABLE ================= */}
             <div className="card">
 
+              {/* FILTER BAR */}
+              <div className="top-filters" style={{ alignItems: "center" }}>
+                <label style={{ fontWeight: 600, fontSize: "14px" }}>
+                  Filter by Course:
+                </label>
+                <select
+                  value={courseFilter}
+                  onChange={(e) => setCourseFilter(e.target.value)}
+                  style={{ minWidth: "240px" }}
+                >
+                  <option value="all">All Courses</option>
+                  {courses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <span
+                  style={{
+                    marginLeft: "auto",
+                    fontSize: "13px",
+                    color: "#64748b",
+                  }}
+                >
+                  Showing {filteredAssignments.length} of {assignments.length}
+                </span>
+              </div>
+
               <div className="table-container">
 
                 <table>
 
                   <thead>
-
                     <tr>
-
-                      <th> Course </th>
-
-                      <th>
-                        Year
-                      </th>
-
-                      <th>
-                        Semester
-                      </th>
-
-                      <th>
-                        Subject
-                      </th>
-
-                      <th>
-                        Teacher
-                      </th>
-
-                      <th>
-                        Action
-                      </th>
-
+                      <th>Course</th>
+                      <th>Year</th>
+                      <th>Semester</th>
+                      <th>Subject</th>
+                      <th>Teacher</th>
+                      <th>Action</th>
                     </tr>
-
                   </thead>
 
                   <tbody>
 
-                    {assignments.length === 0 ? (
-
+                    {filteredAssignments.length === 0 ? (
                       <tr>
-
-                        <td colSpan="6">
-                          No assignments found
-                        </td>
-
+                        <td colSpan="6">No assignments found</td>
                       </tr>
-
                     ) : (
-
-                      assignments.map((a) => (
-
+                      filteredAssignments.map((a) => (
                         <tr key={a.id}>
-
+                          <td>{a.course_name}</td>
+                          <td>Year {a.year_number}</td>
+                          <td>Semester {a.semester}</td>
+                          <td>{a.subject_name}</td>
+                          <td>{a.teacher_name}</td>
                           <td>
-                            {a.course_name}
-                          </td>
-
-                          <td>
-                            Year {a.year_number}
-                          </td>
-
-                          <td>
-                            Semester {a.semester}
-                          </td>
-
-                          <td>
-                            {a.subject_name}
-                          </td>
-
-                          <td>
-                            {a.teacher_name}
-                          </td>
-
-                          <td>
-
+                            
                             <div className="action-buttons">
-
                               {/* EDIT */}
                               <button
                                 className="btn-edit"
-                                onClick={() =>
-                                  handleEdit(a)
-                                }
+                                onClick={() => handleEdit(a)}
                               >
                                 Edit
                               </button>
@@ -604,19 +383,13 @@ export default function TeachingAssignments() {
                               {/* DELETE */}
                               <button
                                 className="btn-delete"
-                                onClick={() =>
-                                  handleDelete(a.id)
-                                }
+                                onClick={() => handleDelete(a.id)}
                               >
                                 Delete
                               </button>
-
                             </div>
-
                           </td>
-
                         </tr>
-
                       ))
                     )}
 

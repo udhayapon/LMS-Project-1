@@ -20,14 +20,19 @@ import TeachingAssignments from "./features/teaching/TeachingAssignments";
 import FeedbackHistory from "./features/feedback/FeedbackHistory";
 // ===== TIMETABLE =====
 import TimetableBuilder from "./features/timetable/TimetableBuilder";
-import TimetableView from "./features/timetable/TimetableView";  // (built next)
+import TimetableView from "./features/timetable/TimetableView";  
+import AttendanceTeacher from "./features/attendance/AttendanceTeacher";
+import AttendanceStudent from "./features/attendance/AttendanceStudent";
+import StudentProgress from "./features/progress/StudentProgress";
+import TeacherProgress from "./features/progress/TeacherProgress";
+import AdminFees from "./features/fees/AdminFees";
 
 // ===== ADMIN =====
 import Dashboard from "./pages/Admin/Dashboard";
-
 import Students from "./pages/Admin/Students";
 import Teachers from "./pages/Admin/Teachers";
 import AdminUsers from "./pages/Admin/AdminUsers";
+import Parents from "./pages/Admin/Parents";
 
 import Enrollments from "./pages/Admin/Enrollments";
 import Departments from "./pages/Admin/Departments";
@@ -35,6 +40,7 @@ import Departments from "./pages/Admin/Departments";
 // ===== TEACHER =====
 import TeacherHome from "./pages/Teacher/TeacherHome";
 import SubjectDetails from "./pages/Teacher/SubjectDetails";
+import TeacherChat from "./pages/Teacher/TeacherChat";
 
 // ===== ASSIGNMENTS =====
 import AssignmentSubmissions from "./features/assignments/AssignmentSubmissions";
@@ -44,6 +50,15 @@ import StudentHome from "./pages/Student/StudentHome";
 import StudentCourses from "./pages/Student/StudentCourses";
 import StudentSubjectDetails from "./pages/Student/StudentSubjectDetails";
 import StudentGrades from "./pages/Student/StudentGrades";
+
+// ===== PARENT =====
+import ParentDashboard from "./pages/Parent/ParentDashboard";
+import ParentAttendance from "./features/Attendance/ParentAttendance";
+import ParentAssignments from "./features/assignments/ParentAssignments";
+import ParentFees from "./features/fees/ParentFees";
+import ParentGrades from "./pages/Parent/ParentGrades";
+import ParentChat from "./pages/Parent/ParentChat";
+import ParentMessage from "./pages/Parent/ParentMessage";
 
 
 // ================= USER HELPER =================
@@ -63,48 +78,21 @@ const getUser = () => {
 
 
 // ================= PROTECTED ROUTE =================
-function ProtectedRoute({
-  children,
-  role,
-  adminOnly = false
-}) {
-
+function ProtectedRoute({children,role,adminOnly = false}) 
+{
   const user = getUser();
 
   if (!user)
-    return (
-      <Navigate
-        to="/"
-        replace
-      />
-    );
+    return ( <Navigate to="/" replace/>);
 
-  if (
-    adminOnly &&
-    user.role?.toLowerCase() !==
-      "admin"
-  ) {
-
-    return (
-      <Navigate
-        to="/"
-        replace
-      />
-    );
+  if ( adminOnly && user.role?.toLowerCase() !== "admin")
+  {
+    return (<Navigate to="/" replace />);
   }
 
-  if (
-    role &&
-    user.role?.toLowerCase() !==
-      role.toLowerCase()
-  ) {
+  if ( role && user.role?.toLowerCase() !== role.toLowerCase()) {
 
-    return (
-      <Navigate
-        to="/"
-        replace
-      />
-    );
+    return ( <Navigate to="/" replace />);
   }
 
   return children;
@@ -116,47 +104,25 @@ function RoleRedirect() {
 
   const user = getUser();
 
-  if (!user)
-    return (
-      <Navigate
-        to="/"
-        replace
-      />
-    );
+  if (!user) 
+    return (<Navigate to="/" replace />);
 
   const role =
     user.role?.toLowerCase();
 
   if (role === "admin")
-    return (
-      <Navigate
-        to="/dashboard"
-        replace
-      />
-    );
+    return (<Navigate to="/dashboard" replace/>);
 
   if (role === "teacher")
-    return (
-      <Navigate
-        to="/teacher"
-        replace
-      />
-    );
+    return (<Navigate to="/teacher" replace/>);
 
   if (role === "student")
-    return (
-      <Navigate
-        to="/student"
-        replace
-      />
-    );
+    return (<Navigate to="/student" replace/>);
 
-  return (
-    <Navigate
-      to="/"
-      replace
-    />
-  );
+  if (role === "parent")
+  return (<Navigate to="/parent" replace />);
+
+  return (<Navigate to="/" replace /> );
 }
 
 
@@ -170,31 +136,14 @@ function App() {
       <Routes>
 
         {/* ===== PUBLIC ===== */}
-        <Route
-          path="/"
-          element={<Login />}
-        />
+        <Route path="/" element={<Login />}/>
 
         {/* ===== AFTER LOGIN ===== */}
-        <Route
-          path="/home"
-          element={<RoleRedirect />}
-        />
-
-
+        <Route path="/home" element={<RoleRedirect />} />
 
         {/* ================= COMMON ================= */}
 
-        <Route
-          path="/courses"
-          element={
-            <ProtectedRoute>
-
-              <Courses />
-
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/courses" element={  <ProtectedRoute> <Courses /> </ProtectedRoute> }/>
 
         <Route
           path="/courses/:id"
@@ -243,20 +192,7 @@ function App() {
 
 
         {/* ================= TEACHERS ================= */}
-        <Route
-          path="/teachers"
-          element={
-            <ProtectedRoute
-              adminOnly={true}
-            >
-
-              <Teachers />
-
-            </ProtectedRoute>
-          }
-        />
-
-
+        <Route path="/teachers" element={  <ProtectedRoute adminOnly={true}> <Teachers />  </ProtectedRoute>  }/>
 
         {/* ================= ADMINS ================= */}
         <Route
@@ -272,7 +208,14 @@ function App() {
           }
         />
 
-
+        <Route
+  path="/parents-admin"
+  element={
+    <ProtectedRoute adminOnly={true}>
+      <Parents />
+    </ProtectedRoute>
+  }
+/>
 
         {/* ================= ENROLLMENTS ================= */}
         <Route
@@ -323,12 +266,8 @@ function App() {
 
 
         {/* ================= TEACHING ASSIGNMENTS ================= */}
-        <Route
-          path="/teaching-assignments"
-          element={
-            <ProtectedRoute
-              adminOnly={true}
-            >
+        <Route path="/teaching-assignments" element={
+            <ProtectedRoute adminOnly={true}>
 
               <TeachingAssignments />
 
@@ -336,7 +275,8 @@ function App() {
           }
         />
 
-
+        <Route path="/teacher/attendance" element={<ProtectedRoute role="teacher"><AttendanceTeacher /></ProtectedRoute>} />
+        <Route path="/student/attendance" element={<ProtectedRoute role="student"><AttendanceStudent /></ProtectedRoute>} />
 
         {/* ================= DEPARTMENTS ================= */}
         <Route
@@ -356,112 +296,26 @@ function App() {
 
         {/* ================= TEACHER ================= */}
 
-        <Route
-          path="/teacher"
-          element={
-            <ProtectedRoute
-              role="teacher"
-            >
-
-              <TeacherHome />
-
-            </ProtectedRoute>
-          }
-        />
-
-
-
-        <Route
-          path="/teacher/subject/:id"
-          element={
-            <ProtectedRoute
-              role="teacher"
-            >
-
-              <SubjectDetails />
-
-            </ProtectedRoute>
-          }
-        />
-
+        <Route path="/teacher" element={ <ProtectedRoute role="teacher"> <TeacherHome /></ProtectedRoute> }/>
+        <Route path="/teacher/subject/:id" element={ <ProtectedRoute role="teacher"><SubjectDetails /></ProtectedRoute>}/>
+        <Route path="/teacher-progress" element={ <ProtectedRoute role="teacher"> <TeacherProgress /></ProtectedRoute>}/>
+        <Route path="/teacher/messages" element={ <ProtectedRoute role="teacher"> <TeacherChat /> </ProtectedRoute> }/>
 
 
         {/* ================= ASSIGNMENT SUBMISSIONS ================= */}
 
-        <Route
-          path="/assignments/:id/submissions"
-          element={
-            <ProtectedRoute>
-
-              <AssignmentSubmissions />
-
-            </ProtectedRoute>
-          }
-        />
-
-
+        <Route path="/assignments/:id/submissions" element={ <ProtectedRoute> <AssignmentSubmissions /> </ProtectedRoute> }/>
 
         {/* ================= STUDENT ================= */}
 
-        <Route
-          path="/student"
-          element={
-            <ProtectedRoute
-              role="student"
-            >
+        <Route path="/student" element={ <ProtectedRoute role="student" > <StudentHome /> </ProtectedRoute> } />
+        <Route path="/student/courses" element={ <ProtectedRoute role="student"> <StudentCourses /> </ProtectedRoute>  }/> 
 
-              <StudentHome />
+        <Route path="/student/subject/:id" element={<ProtectedRoute role="student"> <StudentSubjectDetails /> </ProtectedRoute>}/>
 
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/student/grades" element={<ProtectedRoute role="student" > <StudentGrades /> </ProtectedRoute> }/>
 
-
-
-         <Route
-          path="/student/courses"
-          element={
-            <ProtectedRoute
-              role="student"
-            >
-
-              <StudentCourses />
-
-            </ProtectedRoute>
-          }
-        /> 
-
-
-
-        <Route
-          path="/student/subject/:id"
-          element={
-            <ProtectedRoute
-              role="student"
-            >
-
-              <StudentSubjectDetails />
-
-            </ProtectedRoute>
-          }
-        />
-
-
-
-        <Route
-          path="/student/grades"
-          element={
-            <ProtectedRoute
-              role="student"
-            >
-
-              <StudentGrades />
-
-            </ProtectedRoute>
-          }
-        />
-
-
+        <Route path="/student-progress" element={ <ProtectedRoute role="student"> <StudentProgress /> </ProtectedRoute>}/>
 
         {/* ================= PROFILE ================= */}
 
@@ -518,7 +372,76 @@ function App() {
           </ProtectedRoute>
           }
         /> 
+         {/* ================= PARENT ================= */}
 
+<Route
+  path="/parent"
+  element={
+    <ProtectedRoute role="parent">
+      <ParentDashboard />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/parent/attendance"
+  element={
+    <ProtectedRoute role="parent">
+      <ParentAttendance />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/parent/assignments"
+  element={
+    <ProtectedRoute role="parent">
+      <ParentAssignments />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/parent/fees"
+  element={
+    <ProtectedRoute role="parent">
+      <ParentFees />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/parent/grades"
+  element={
+    <ProtectedRoute role="parent">
+      <ParentGrades />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/parent/chat"
+  element={
+    <ProtectedRoute role="parent">
+      <ParentChat />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/parent/messages"
+  element={
+    <ProtectedRoute role="parent">
+      <ParentMessage />
+    </ProtectedRoute>
+  }
+/>
+
+<Route path="/admin/fees" element={
+  <ProtectedRoute adminOnly={true}>
+    <AdminFees />
+  </ProtectedRoute>
+} />
         {/* ===== FALLBACK ===== */}
         <Route
           path="*"

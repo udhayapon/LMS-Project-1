@@ -7,10 +7,7 @@ User = get_user_model()
 
 # ===================== COURSE =====================
 class Course(models.Model):
-    name = models.CharField(
-        max_length=100,
-        unique=True
-    )
+    name = models.CharField(max_length=100,unique=True)
 
     def __str__(self):
         return self.name
@@ -54,10 +51,12 @@ class Subject(models.Model):
         (8, "Semester 8"),
     )
 
+    # ================= SUBJECT NAME =================
     name = models.CharField(
         max_length=100
     )
 
+    # ================= YEAR =================
     year = models.ForeignKey(
         Year,
         on_delete=models.CASCADE,
@@ -67,10 +66,14 @@ class Subject(models.Model):
     # ================= SEMESTER =================
     semester = models.IntegerField(
         choices=SEMESTER_CHOICES,
-        default = 1
+        default=1
     )
 
     class Meta:
+
+        # Alphabetical ordering
+        ordering = ['name']
+
         constraints = [
             models.UniqueConstraint(
                 fields=[
@@ -415,6 +418,12 @@ class Quiz(models.Model):
         default=10
     )
 
+    # NEW FIELD
+    due_date = models.DateTimeField(
+        blank=True,
+        null=True
+    )
+
     total_marks = models.IntegerField(
         default=0
     )
@@ -425,8 +434,7 @@ class Quiz(models.Model):
 
     def __str__(self):
         return self.title
-
-
+    
 # ===================== QUESTION =====================
 class Question(models.Model):
 
@@ -524,6 +532,14 @@ class StudyMaterial(models.Model):
         TeachingAssignment,
         on_delete=models.CASCADE,
         related_name="study_materials"
+    )
+
+    folder = models.ForeignKey(
+        "MaterialFolder",
+        on_delete=models.CASCADE,
+        related_name="materials",
+        null=True,
+        blank=True
     )
 
     uploaded_by = models.ForeignKey(
@@ -683,3 +699,109 @@ class Feedback(models.Model):
             f"{self.direction} - "
             f"{self.teaching_assignment.subject.name}"
         )
+
+# ===================== MATERIAL FOLDER =====================
+class MaterialFolder(models.Model):
+    """
+    A teacher-created folder inside a subject's Study Materials,
+    e.g. "Question Bank", "Unit 1 Notes".
+    """
+
+    name = models.CharField(max_length=120)
+
+    teaching_assignment = models.ForeignKey(
+        TeachingAssignment,
+        on_delete=models.CASCADE,
+        related_name="material_folders"
+    )
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="material_folders"
+    )
+
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = ("name", "teaching_assignment")
+
+    def __str__(self):
+        return f"{self.name} ({self.teaching_assignment})"
+    
+# ===================== FILE CLEANUP SIGNAL =====================
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+
+
+@receiver(post_delete, sender=StudyMaterial)
+def delete_studymaterial_file(sender, instance, **kwargs):
+    # remove the physical file from disk when a StudyMaterial row is deleted
+    if instance.file:
+        instance.file.delete(save=False)
+
+#_________________________________________#
+
+# ===================== FEE =====================
+class Fee(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('partial', 'Partial'),
+        ('paid', 'Paid'),
+    ]
+    student = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='fees',
+        limit_choices_to={'role': 'student'}
+    )
+    term = models.CharField(max_length=50)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    paid_amount = models.DecimalField(         
+        max_digits=10, decimal_places=2, default=0)
+    due_date = models.DateField()
+    paid_date = models.DateField(null=True, blank=True)
+    status = models.CharField(
+        max_length=10, choices=STATUS_CHOICES, default='pending'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.student.username} – {self.term}"
+    
+
+# ===================== PARENT MESSAGE =====================
+class ParentMessage(models.Model):
+    sender = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='sent_messages'
+    )
+    receiver = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='received_messages'
+    )
+    text = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.sender.username} → {self.receiver.username}"
+    
+# ===================== CONVERSATION MESSAGE =====================
+class ConversationMessage(models.Model):
+    sender = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='sent_convo_messages'
+    )
+    receiver = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='received_convo_messages'
+    )
+    text = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.sender.username} -> {self.receiver.username}"

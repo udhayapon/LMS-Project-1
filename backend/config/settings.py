@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     'users',
     'courses',
     'timetable',
+    'attendance',
     # Third-party
     'rest_framework',
     'corsheaders',

@@ -1,42 +1,23 @@
 # ===================== IMPORTS =====================
 from django.contrib.auth import authenticate
 
-from rest_framework import (
-    viewsets,
-    status
-)
+from rest_framework import ( viewsets,status)
 
-from rest_framework.decorators import (
-    api_view,
-    permission_classes
-)
+from rest_framework.decorators import (api_view,permission_classes)
 
 from rest_framework.response import Response
 
-from rest_framework.permissions import (
-    IsAuthenticated,
-    AllowAny
-)
+from rest_framework.permissions import (IsAuthenticated,AllowAny)
 
-from rest_framework_simplejwt.tokens import (
-    RefreshToken
-)
+from rest_framework_simplejwt.tokens import ( RefreshToken)
 
-from .models import (
-    User,
-    Department
-)
+from .models import (User,Department)
 
-from .serializers import (
-    UserSerializer,
-    DepartmentSerializer
-)
+from .serializers import (UserSerializer,DepartmentSerializer)
 
 
 # ===================== DEPARTMENT VIEWSET =====================
-class DepartmentViewSet(
-    viewsets.ModelViewSet
-):
+class DepartmentViewSet(viewsets.ModelViewSet):
 
     queryset = Department.objects.all()
 
@@ -46,9 +27,7 @@ class DepartmentViewSet(
 
 
 # ===================== USER VIEWSET =====================
-class UserViewSet(
-    viewsets.ModelViewSet
-):
+class UserViewSet(viewsets.ModelViewSet):
 
     queryset = User.objects.all()
 
@@ -62,21 +41,27 @@ class UserViewSet(
             "role"
         )
 
+        # ================= TEACHERS =================
+        if role == "teacher":
+
+            return User.objects.filter(
+                role="teacher"
+            ).order_by(
+                "employee_id"
+            )
+
+        # ================= OTHER ROLES =================
         if role:
 
             return User.objects.filter(
                 role=role
             )
 
+        # ================= ALL USERS =================
         return User.objects.all()
 
     # ================= CREATE =================
-    def create(
-        self,
-        request,
-        *args,
-        **kwargs
-    ):
+    def create(self,request,*args,**kwargs):
 
         serializer = self.get_serializer(
             data=request.data
@@ -158,7 +143,7 @@ class UserViewSet(
 
             status=status.HTTP_200_OK
         )
-
+    
 
 # ===================== LOGIN API =====================
 @api_view(['POST'])

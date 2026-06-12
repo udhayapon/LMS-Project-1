@@ -1,266 +1,200 @@
 import { useEffect, useState } from "react";
 import API from "../../api";
 
-export default function StudyMaterialStudent({
-  teachingId,
-}) {
+export default function StudyMaterialStudent({ teachingId }) {
 
   // ================= STATES =================
-  const [materials, setMaterials] =
-    useState([]);
+  const [folders, setFolders] = useState([]);
+  const [openFolder, setOpenFolder] = useState(null); // null = folder grid
 
-  const [loading, setLoading] =
-    useState(true);
+  const [materials, setMaterials] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
 
-  // ✅ SEARCH
-  const [search, setSearch] =
-    useState("");
-
-  // ================= FETCH =================
-  const fetchMaterials = async () => {
-
+  // ================= FETCH FOLDERS =================
+  const fetchFolders = async () => {
     try {
-
       const res = await API.get(
-        `/study-materials/?teaching_assignment=${teachingId}`
+        `/material-folders/?teaching_assignment=${teachingId}`
       );
-
-      setMaterials(
-        res.data?.results ||
-        res.data ||
-        []
-      );
-
+      setFolders(res.data?.results || res.data || []);
     } catch (err) {
-
-      console.log(
-        "Material fetch error:",
-        err
-      );
-
+      console.log("Folder fetch error:", err);
     } finally {
+      setLoading(false);
+    }
+  };
 
+  // ================= FETCH FILES IN A FOLDER =================
+  const fetchMaterials = async (folderId) => {
+    try {
+      setLoading(true);
+      const res = await API.get(
+        `/study-materials/?teaching_assignment=${teachingId}&folder=${folderId}`
+      );
+      setMaterials(res.data?.results || res.data || []);
+    } catch (err) {
+      console.log("Material fetch error:", err);
+    } finally {
       setLoading(false);
     }
   };
 
   // ================= LOAD =================
   useEffect(() => {
-
-    if (teachingId) {
-
-      fetchMaterials();
-    }
-
+    if (teachingId) fetchFolders();
   }, [teachingId]);
 
-  // ================= FILTERED MATERIALS =================
-  const filteredMaterials =
-    materials.filter((m) => {
+  // ================= OPEN / CLOSE FOLDER =================
+  const handleOpenFolder = (folder) => {
+    setOpenFolder(folder);
+    setSearch("");
+    fetchMaterials(folder.id);
+  };
 
-      return (
+  const handleBack = () => {
+    setOpenFolder(null);
+    setMaterials([]);
+  };
 
-        m.title
-          ?.toLowerCase()
-          .includes(
-            search.toLowerCase()
-          )
+  // ================= FILTERED =================
+  const filteredMaterials = materials.filter((m) =>
+    m.title?.toLowerCase().includes(search.toLowerCase()) ||
+    m.description?.toLowerCase().includes(search.toLowerCase()) ||
+    m.uploaded_by_name?.toLowerCase().includes(search.toLowerCase())
+  );
 
-        ||
+  // ================= FOLDER GRID VIEW =================
+  if (!openFolder) {
+    return (
+      <div className="card">
+        <div style={{ marginBottom: "20px" }}>
+          <h2>Study Materials</h2>
+          <p>Open a folder to view and download files</p>
+        </div>
 
-        m.description
-          ?.toLowerCase()
-          .includes(
-            search.toLowerCase()
-          )
+        {loading ? (
+          <p>Loading folders...</p>
+        ) : folders.length === 0 ? (
+          <p>No folders yet</p>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(auto-fill, minmax(190px, 1fr))",
+              gap: "16px",
+            }}
+          >
+            {folders.map((f) => (
+              <div
+                key={f.id}
+                onClick={() => handleOpenFolder(f)}
+                style={{
+                  background: "#f8fafc",
+                  border: "1px solid #e6eaf2",
+                  borderRadius: "14px",
+                  padding: "20px 18px",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ fontSize: "34px", lineHeight: 1 }}>📁</div>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: "15px",
+                    marginTop: "12px",
+                  }}
+                >
+                  {f.name}
+                </div>
+                <div
+                  style={{
+                    fontSize: "12.5px",
+                    color: "#64748b",
+                    marginTop: "3px",
+                  }}
+                >
+                  {f.file_count} file{f.file_count === 1 ? "" : "s"}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
-        ||
-
-        m.uploaded_by_name
-          ?.toLowerCase()
-          .includes(
-            search.toLowerCase()
-          )
-      );
-    });
-
+  // ================= INSIDE A FOLDER =================
   return (
     <div className="card">
 
-      {/* ================= HEADER ================= */}
-      <div
-        style={{
-          marginBottom: "20px",
-        }}
-      >
-
-        <h2>
+      {/* breadcrumb */}
+      <div style={{ marginBottom: "16px", fontSize: "14px", color: "#64748b" }}>
+        <span
+          onClick={handleBack}
+          style={{ color: "#3b82f6", fontWeight: 600, cursor: "pointer" }}
+        >
           Study Materials
-        </h2>
-
-        <p>
-          View and download notes
-        </p>
-
+        </span>
+        {"  ›  "}
+        <strong style={{ color: "#1e293b" }}>{openFolder.name}</strong>
       </div>
 
-      {/* ================= SEARCH ================= */}
-      <div
-        style={{
-          marginBottom: "20px",
-        }}
-      >
-
+      {/* header + search */}
+      <div style={{ marginBottom: "20px" }}>
+        <h3>{openFolder.name}</h3>
         <input
           type="text"
-          placeholder="Search materials..."
+          placeholder="Search files..."
           value={search}
-          onChange={(e) =>
-            setSearch(
-              e.target.value
-            )
-          }
-          style={{
-            width: "100%",
-            maxWidth: "350px",
-          }}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ width: "100%", maxWidth: "350px", marginTop: "10px" }}
         />
-
       </div>
 
-      {/* ================= LOADING ================= */}
       {loading ? (
-
-        <p>
-          Loading materials...
-        </p>
-
+        <p>Loading files...</p>
       ) : filteredMaterials.length === 0 ? (
-
-        <p>
-          No study materials found
-        </p>
-
+        <p>No files in this folder</p>
       ) : (
-
-        <div
-          style={{
-            overflowX: "auto",
-          }}
-        >
-
+        <div style={{ overflowX: "auto" }}>
           <table>
-
             <thead>
-
               <tr>
-
-                <th>
-                  Title
-                </th>
-
-                <th>
-                  Description
-                </th>
-
-                <th>
-                  Uploaded By
-                </th>
-
-                <th>
-                  Date
-                </th>
-
-                <th>
-                  Action
-                </th>
-
+                <th>Title</th>
+                <th>Description</th>
+                <th>Uploaded By</th>
+                <th>Date</th>
+                <th>Action</th>
               </tr>
-
             </thead>
-
             <tbody>
-
-              {filteredMaterials.map(
-                (m) => (
-
-                  <tr
-                    key={m.id}
-                  >
-
-                    {/* TITLE */}
-                    <td>
-                      {m.title}
-                    </td>
-
-                    {/* DESCRIPTION */}
-                    <td>
-                      {m.description ||
-                        "-"}
-                    </td>
-
-                    {/* TEACHER */}
-                    <td>
-                      {
-                        m.uploaded_by_name
-                      }
-                    </td>
-
-                    {/* DATE */}
-                    <td>
-
-                      {m.created_at
-
-                        ? new Date(
-                            m.created_at
-                          ).toLocaleDateString()
-
-                        : "-"}
-
-                    </td>
-
-                    {/* ACTION */}
-                    <td>
-
-                      {m.file ? (
-
-                        <a
-                          href={m.file}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-
-                          <button
-                            className="btn-primary"
-                          >
-                            View Material
-                          </button>
-
-                        </a>
-
-                      ) : (
-
-                        <span>
-                          No file
-                        </span>
-
-                      )}
-
-                    </td>
-
-                  </tr>
-
-                )
-              )}
-
+              {filteredMaterials.map((m) => (
+                <tr key={m.id}>
+                  <td>{m.title}</td>
+                  <td>{m.description || "-"}</td>
+                  <td>{m.uploaded_by_name}</td>
+                  <td>
+                    {m.created_at
+                      ? new Date(m.created_at).toLocaleDateString()
+                      : "-"}
+                  </td>
+                  <td>
+                    {m.file ? (
+                      <a href={m.file} target="_blank" rel="noreferrer">
+                        <button className="btn-primary">View Material</button>
+                      </a>
+                    ) : (
+                      <span>No file</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
             </tbody>
-
           </table>
-
         </div>
-
       )}
-
     </div>
   );
 }
