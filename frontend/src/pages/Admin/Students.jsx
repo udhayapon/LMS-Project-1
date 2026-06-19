@@ -16,6 +16,17 @@ export default function Students() {
   const [editingUser, setEditingUser] = useState(null);
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [importing, setImporting] = useState(false);
+
+  // collapsible panels
+  const [showBulk, setShowBulk] = useState(false);
+  const [showPromote, setShowPromote] = useState(false);
+
+  // promote states
+  const [promoteCourse, setPromoteCourse] = useState("");
+  const [promoteYear, setPromoteYear] = useState("");
+  const [promoteSemester, setPromoteSemester] = useState("");
+  const [promoting, setPromoting] = useState(false);
 
   const [newUser, setNewUser] = useState({
     username: "",
@@ -153,6 +164,88 @@ export default function Students() {
     }
   };
 
+  // ================= CSV: DOWNLOAD TEMPLATE =================
+  const downloadTemplate = async () => {
+    try {
+      const res = await API.get("users/student-template/", { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([res.data], { type: "text/csv" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "student-admission-template.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Could not download template.");
+    }
+  };
+
+  // ================= CSV: UPLOAD + DOWNLOAD CREDENTIALS =================
+  const uploadCSV = async (file) => {
+    if (!file) return;
+    setImporting(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await API.post("users/student-import/", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const { message, created, errors } = res.data;
+      alert(message + (errors?.length ? "\n\n" + errors.slice(0, 10).join("\n") : ""));
+
+      if (created?.length) {
+        const header = "username,roll_number,email,password\n";
+        const rows = created.map(
+          (c) => `${c.username},${c.roll_number},${c.email},${c.password}`
+        );
+        const blob = new Blob([header + rows.join("\n")], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "student-credentials.csv";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+      fetchUsers();
+    } catch (err) {
+      alert(err.response?.data?.detail || "Could not import CSV.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // ================= PROMOTE STUDENTS =================
+  const handlePromote = async () => {
+    if (!promoteCourse || !promoteYear || !promoteSemester) {
+      return alert("Select course, year and semester to promote.");
+    }
+    const courseName = courses.find((c) => String(c.id) === String(promoteCourse))?.name || "this course";
+    const nextSem = Number(promoteSemester) + 1;
+    if (Number(promoteSemester) >= 8) {
+      return alert("Semester 8 is the final semester — these students cannot be promoted further.");
+    }
+    if (!window.confirm(
+      `Promote all students in ${courseName}, Year ${promoteYear}, Semester ${promoteSemester} ` +
+      `to Semester ${nextSem}?\n\nThis changes their year/semester. Their past results and marks are kept.`
+    )) return;
+
+    setPromoting(true);
+    try {
+      const res = await API.post("users/promote-students/", {
+        course: promoteCourse,
+        year: promoteYear,
+        semester: promoteSemester,
+      });
+      alert(res.data?.detail || "Promotion complete.");
+      setPromoteCourse(""); setPromoteYear(""); setPromoteSemester("");
+      setShowPromote(false);
+      fetchUsers();
+    } catch (err) {
+      alert(err.response?.data?.detail || "Could not promote students.");
+    } finally {
+      setPromoting(false);
+    }
+  };
+
   // ================= FILTER =================
   const filteredUsers = users.filter((u) => {
     if (u.role !== "student") return false;
@@ -180,7 +273,80 @@ export default function Students() {
               <p>Manage student records</p>
             </div>
 
-           
+            {/* ================= ACTION BUTTONS (collapsed by default) ================= */}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <button
+                onClick={() => { setShowBulk((v) => !v); setShowPromote(false); }}
+                style={{ ...csvBtn, ...(showBulk ? activeBtn : {}) }}
+              >
+                ⬆ Bulk Admission (CSV)
+              </button>
+              <button
+                onClick={() => { setShowPromote((v) => !v); setShowBulk(false); }}
+                style={{ ...csvBtn, ...(showPromote ? activeBtn : {}) }}
+              >
+                ↑ Promote to Next Semester
+              </button>
+            </div>
+
+            {/* ================= BULK CSV PANEL ================= */}
+            {showBulk && (
+              <div className="card" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <strong style={{ fontSize: 14, color: "#0f172a" }}>Bulk Admission (CSV):</strong>
+                <button onClick={downloadTemplate} style={csvBtn}>
+                  ⬇ Download Template
+                </button>
+                <label style={{ ...csvBtn, margin: 0 }}>
+                  {importing ? "Importing…" : "⬆ Upload CSV"}
+                  <input
+                    type="file"
+                    accept=".csv"
+                    style={{ display: "none" }}
+                    disabled={importing}
+                    onChange={(e) => { uploadCSV(e.target.files[0]); e.target.value = ""; }}
+                  />
+                </label>
+                <span style={{ fontSize: 12, color: "#64748b" }}>
+                  Fill department &amp; course by name. After upload, a credentials file downloads — distribute it to students.
+                </span>
+              </div>
+            )}
+
+            {/* ================= PROMOTE PANEL ================= */}
+            {showPromote && (
+              <div className="card" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <strong style={{ fontSize: 14, color: "#0f172a" }}>Promote to Next Semester:</strong>
+
+                <select value={promoteCourse} onChange={(e) => setPromoteCourse(e.target.value)} style={{ minWidth: 160 }}>
+                  <option value="">Select Course</option>
+                  {courses.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+
+                <select value={promoteYear} onChange={(e) => setPromoteYear(e.target.value)} style={{ minWidth: 110 }}>
+                  <option value="">Year</option>
+                  {[1, 2, 3, 4].map((y) => <option key={y} value={y}>Year {y}</option>)}
+                </select>
+
+                <select value={promoteSemester} onChange={(e) => setPromoteSemester(e.target.value)} style={{ minWidth: 130 }}>
+                  <option value="">Semester</option>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => <option key={s} value={s}>Semester {s}</option>)}
+                </select>
+
+                <button
+                  onClick={handlePromote}
+                  disabled={promoting}
+                  style={{ ...csvBtn, background: "#0f172a", color: "#fff", border: "none" }}
+                >
+                  {promoting ? "Promoting…" : "↑ Promote"}
+                </button>
+
+                <span style={{ fontSize: 12, color: "#64748b" }}>
+                  Moves the whole class up one semester. Past results &amp; marks are kept.
+                </span>
+              </div>
+            )}
 
             {/* ================= FORM ================= */}
             <div className="card">
@@ -281,7 +447,7 @@ export default function Students() {
             </div>
 
               <div className="table-container">
-                
+
                 <table>
                   <thead>
                     <tr>
@@ -327,3 +493,25 @@ export default function Students() {
     </div>
   );
 }
+
+// clean outline button — matches the semester results style
+const csvBtn = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  background: "#ffffff",
+  color: "#334155",
+  border: "1px solid #d8dee9",
+  borderRadius: 10,
+  padding: "10px 18px",
+  fontSize: 13.5,
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+// active (open) state for the toggle buttons
+const activeBtn = {
+  background: "#0f172a",
+  color: "#fff",
+  border: "1px solid #0f172a",
+};

@@ -23,13 +23,21 @@ SEMESTER_CHOICES = (
     (8, "Semester 8"),
 )
 
-
 # ================= DEPARTMENT =================
 class Department(models.Model):
 
     name = models.CharField(
         max_length=100,
         unique=True
+    )
+
+    hod = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='hod_of',
+        limit_choices_to={'role': 'teacher'},
     )
 
     class Meta:
@@ -101,7 +109,11 @@ class User(AbstractUser):
         null=True,
         blank=True
     )
-
+    # ================= STUDENT BATCH / ADMISSION YEAR =================
+    batch_year = models.IntegerField(
+        null=True,
+        blank=True
+    )
     # ================= SAVE =================
     def save(self, *args, **kwargs):
 
@@ -132,11 +144,18 @@ class User(AbstractUser):
             else:
                 dept_code = "GN"
 
-            # ================= FIND LAST STUDENT =================
+            # ================= YEAR PREFIX (from batch year) =================
+            # batch_year 2021 -> "21". Falls back to current year if not set.
+            import datetime
+            batch = self.batch_year or datetime.date.today().year
+            year_prefix = str(batch)[-2:]
+
+            # ================= FIND LAST STUDENT IN SAME BATCH + DEPT =================
+            # counter restarts per (department, batch year)
             last_student = User.objects.filter(
                 role="student",
                 department=self.department,
-                roll_number__isnull=False,
+                roll_number__startswith=f"{year_prefix}{dept_code}",
             ).order_by('-roll_number').first()
 
             # ================= COMPUTE NEXT NUMBER =================
@@ -148,7 +167,7 @@ class User(AbstractUser):
                     pass
 
             # ================= FINAL ROLL NUMBER =================
-            self.roll_number = f"21{dept_code}{new_number:03d}"
+            self.roll_number = f"{year_prefix}{dept_code}{new_number:03d}"
 
         # ================= TEACHER EMPLOYEE ID =================
         if (

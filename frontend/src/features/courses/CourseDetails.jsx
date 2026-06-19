@@ -39,6 +39,9 @@ export default function CourseDetails() {
   const [subject, setSubject] =
     useState("");
 
+  const [code, setCode] =
+    useState("");
+
   const [semester, setSemester] =
     useState("");
 
@@ -203,6 +206,7 @@ export default function CourseDetails() {
             `/subjects/${editingSubjectId}/`,
             {
               name: subject,
+              code: code,
               year: Number(yearId),
               semester: Number(semester),
             }
@@ -219,6 +223,7 @@ export default function CourseDetails() {
             "/subjects/",
             {
               name: subject,
+              code: code,
               year: Number(yearId),
               semester: Number(semester),
             }
@@ -231,6 +236,7 @@ export default function CourseDetails() {
 
         // ================= RESET =================
         setSubject("");
+        setCode("");
         setYearId("");
         setSemester("");
 
@@ -509,6 +515,17 @@ export default function CourseDetails() {
 
                     </select>
 
+                    {/* CODE */}
+                    <input
+                      placeholder="Subject Code (e.g. HS3152)"
+                      value={code}
+                      onChange={(e) =>
+                        setCode(
+                          e.target.value
+                        )
+                      }
+                    />
+
                     {/* SUBJECT */}
                     <input
                       placeholder="Subject Name"
@@ -579,6 +596,10 @@ export default function CourseDetails() {
                             <tr>
 
                               <th>
+                                Code
+                              </th>
+
+                              <th>
                                 Subject
                               </th>
 
@@ -606,6 +627,11 @@ export default function CourseDetails() {
                                     key={s.id}
                                   >
 
+                                    {/* CODE */}
+                                    <td>
+                                      {s.code || "—"}
+                                    </td>
+
                                     {/* SUBJECT */}
                                     <td>
                                       {s.name}
@@ -631,6 +657,10 @@ export default function CourseDetails() {
 
                                             setSubject(
                                               s.name
+                                            );
+
+                                            setCode(
+                                              s.code || ""
                                             );
 
                                             setSemester(
@@ -674,7 +704,7 @@ export default function CourseDetails() {
 
                               <tr>
 
-                                <td colSpan="3">
+                                <td colSpan="4">
                                   No subjects
                                 </td>
 
@@ -798,4 +828,4 @@ export default function CourseDetails() {
 
     </div>
   );
-} 
+}

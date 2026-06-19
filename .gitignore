@@ -1,0 +1,28 @@
+# ---- Python / Backend ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+backend/media/
+backend/staticfiles/
+
+# Environment variables
+.env
+.env.local
+
+# ---- Editor / OS ----
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.sw?

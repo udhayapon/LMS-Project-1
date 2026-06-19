@@ -290,13 +290,9 @@ export default function SubjectDetails() {
                           <tr key={s.id}>
 
                             <td> {s.student_name} </td>
-
                             <td> {s.student_roll_no || "-"} </td>
-
                             <td>  {s.course_name} </td>
-
                             <td>  {s.subject_name} </td>
-
                             <td> Year {s.year_number} </td>
 
                           </tr>
@@ -325,7 +321,8 @@ export default function SubjectDetails() {
             {/* ================= ASSIGNMENTS TAB ================= */}
             {activeTab === "assignments" && (
 
-              <Assignment teachingId={id} />
+              <Assignments teachingId={id} />
+
             )}
 
             {/* ================= QUIZ TAB ================= */}

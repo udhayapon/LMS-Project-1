@@ -11,6 +11,31 @@ const I = {
   bell: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
 };
 
+// attendance health color: green ≥75, amber 60–74, red below
+const attColor = (p) => (p >= 75 ? "#10b981" : p >= 60 ? "#f59e0b" : "#ef4444");
+
+// SVG donut ring (no library). Shows pct in the center.
+function Ring({ pct, size = 116, stroke = 11 }) {
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (Math.min(pct, 100) / 100) * circ;
+  const color = attColor(pct);
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#eef0f4" strokeWidth={stroke} />
+      <circle
+        cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central"
+        style={{ fontSize: size * 0.26, fontWeight: 700, fill: "#0f172a", fontVariantNumeric: "tabular-nums" }}>
+        {pct}%
+      </text>
+    </svg>
+  );
+}
+
 export default function StudentHome() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const [open, setOpen] = useState(false);
@@ -22,8 +47,10 @@ export default function StudentHome() {
   const [submissions, setSubmissions] = useState([]);
   const [quizAttempts, setQuizAttempts] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [attendance, setAttendance] = useState([]);   // per-subject: {subject, pct, present, total}
+  const [attLoaded, setAttLoaded] = useState(false);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); loadAttendance(); }, []);
 
   const loadData = async () => {
     try {
@@ -63,10 +90,55 @@ export default function StudentHome() {
     }
   };
 
+  // ── Attendance: semester dates → records in range → group by subject ──
+  const loadAttendance = async () => {
+    try {
+      // 1) semester range (same source as the timetable builder)
+      const semRes = await API.get("/semester/");
+      const sem = (semRes.data || [])[0];
+      if (!sem || !sem.start_date || !sem.end_date) {
+        setAttLoaded(true);   // no dates set → panel shows a quiet message
+        return;
+      }
+
+      // 2) my attendance for that range
+      const res = await API.get(
+        `/attendance/?from_date=${sem.start_date}&to_date=${sem.end_date}`
+      );
+      const data = res.data?.results || res.data || [];
+
+      // 3) group by teaching assignment, tally present/total (same as course-wise report)
+      const map = {};
+      data.forEach((a) => {
+        const key = a.teaching_assignment;
+        if (!map[key]) map[key] = { subject: a.subject_name || "Subject", present: 0, total: 0 };
+        map[key].total++;
+        if (a.status === "present" || a.status === "duty_leave") map[key].present++;
+      });
+
+      const rows = Object.values(map)
+        .map((s) => ({ ...s, pct: s.total ? Math.round((s.present / s.total) * 100) : 0 }))
+        .sort((a, b) => a.pct - b.pct);   // lowest attendance first — most actionable
+
+      setAttendance(rows);
+      setAttLoaded(true);
+    } catch (err) {
+      console.log("Attendance load error:", err);
+      setAttLoaded(true);
+    }
+  };
+
   const pendingAssignments = Math.max(assignments.length - submissions.length, 0);
   const pendingQuizzes = Math.max(quizzes.length - quizAttempts.length, 0);
   const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
   const fmt = (iso) => (iso ? new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "");
+
+  // overall attendance across all subjects
+  const attTotals = attendance.reduce(
+    (acc, s) => ({ present: acc.present + s.present, total: acc.total + s.total }),
+    { present: 0, total: 0 }
+  );
+  const overallAtt = attTotals.total ? Math.round((attTotals.present / attTotals.total) * 100) : 0;
 
   // Real activity timeline: merge submissions + quiz attempts, newest first
   const feed = [
@@ -122,26 +194,68 @@ export default function StudentHome() {
               </div>
 
               <div className="sd-grid">
-                {/* left: activity */}
-                <div className="sd-panel">
-                  <div className="sd-pt">Recent activity</div>
-                  {feed.length === 0 ? (
-                    <div className="sd-empty">Nothing yet. Submit an assignment or take a quiz to get started.</div>
-                  ) : (
-                    feed.map((a, i) => (
-                      <div className="sd-frow" key={i}>
-                        <div className="sd-node" style={{ background: a.tint + "18", color: a.tint }}>{I[a.icon]}</div>
-                        <div className="sd-fmain">
-                          <div className="sd-ftitle">{a.title}</div>
-                          <div className="sd-fsub">{a.sub}</div>
+                {/* LEFT: attendance (donut) + activity */}
+                <div className="sd-stack">
+
+                  {/* attendance — overall ring + per-subject rings */}
+                  <div className="sd-panel">
+                    <div className="sd-pt">Attendance</div>
+                    {!attLoaded ? (
+                      <div className="sd-empty">Loading attendance…</div>
+                    ) : attendance.length === 0 ? (
+                      <div className="sd-empty">No attendance recorded yet this semester.</div>
+                    ) : (
+                      <div style={{ display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap" }}>
+                        {/* overall ring */}
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                          <Ring pct={overallAtt} size={124} stroke={12} />
+                          <div style={{ fontSize: 12.5, fontWeight: 600, color: "#667085" }}>Overall</div>
+                          <div style={{ fontSize: 11.5, color: "#98a2b3" }}>
+                            {attTotals.present}/{attTotals.total} hours present
+                          </div>
                         </div>
-                        <div className="sd-ftime">{fmt(a.t)}</div>
+
+                        {/* per-subject mini rings — 2 per row */}
+                        <div style={{ flex: 1, minWidth: 240, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", columnGap: 18, rowGap: 16 }}>
+                          {attendance.map((s, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                              <Ring pct={s.pct} size={46} stroke={6} />
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: 13.5, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {s.subject}
+                                </div>
+                                <div style={{ fontSize: 12, color: "#98a2b3" }}>
+                                  {s.present}/{s.total} present
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))
-                  )}
+                    )}
+                  </div>
+
+                  {/* recent activity */}
+                  <div className="sd-panel">
+                    <div className="sd-pt">Recent activity</div>
+                    {feed.length === 0 ? (
+                      <div className="sd-empty">Nothing yet. Submit an assignment or take a quiz to get started.</div>
+                    ) : (
+                      feed.map((a, i) => (
+                        <div className="sd-frow" key={i}>
+                          <div className="sd-node" style={{ background: a.tint + "18", color: a.tint }}>{I[a.icon]}</div>
+                          <div className="sd-fmain">
+                            <div className="sd-ftitle">{a.title}</div>
+                            <div className="sd-fsub">{a.sub}</div>
+                          </div>
+                          <div className="sd-ftime">{fmt(a.t)}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
 
-                {/* right: progress + notifications */}
+                {/* RIGHT: progress + notifications */}
                 <div className="sd-stack">
                   <div className="sd-panel">
                     <div className="sd-pt">Your progress</div>

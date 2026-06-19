@@ -5,12 +5,14 @@ from .models import (User,Department)
 # ================= DEPARTMENT =================
 class DepartmentSerializer(serializers.ModelSerializer):
 
+    hod_name = serializers.CharField(
+        source='hod.username',
+        read_only=True
+    )
+
     class Meta:
         model = Department
-        fields = [
-            'id',
-            'name'
-        ]
+        fields = ['id','name','hod','hod_name', ]
 
 
 # ================= USER =================

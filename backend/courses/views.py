@@ -90,7 +90,7 @@ def get_enrolled_ta_ids(user):
 # ===================== STUDENT PROGRESS HELPER =====================
 def calculate_student_progress(student, ta):
 
-    # Attendance
+    # ================= ATTENDANCE =================
     total_attendance = Attendance.objects.filter(
         student=student,
         teaching_assignment=ta
@@ -104,10 +104,11 @@ def calculate_student_progress(student, ta):
 
     attendance_percent = (
         round((present_attendance / total_attendance) * 100, 1)
-        if total_attendance > 0 else 0
+        if total_attendance > 0
+        else 0
     )
 
-    # Assignments
+    # ================= ASSIGNMENTS =================
     total_assignments = Assignment.objects.filter(
         teaching_assignment=ta
     ).count()
@@ -119,10 +120,11 @@ def calculate_student_progress(student, ta):
 
     assignment_percent = (
         round((submitted_assignments / total_assignments) * 100, 1)
-        if total_assignments > 0 else 0
+        if total_assignments > 0
+        else 0
     )
 
-    # Quiz Average
+    # ================= QUIZ AVERAGE =================
     attempts = QuizAttempt.objects.filter(
         student=student,
         quiz__teaching_assignment=ta
@@ -137,13 +139,16 @@ def calculate_student_progress(student, ta):
         else 0
     )
 
-    # Pending Assignments
+    # ================= PENDING ASSIGNMENTS =================
     pending_assignments = []
 
     submitted_ids = Submission.objects.filter(
         student=student,
         assignment__teaching_assignment=ta
-    ).values_list("assignment_id", flat=True)
+    ).values_list(
+        "assignment_id",
+        flat=True
+    )
 
     for assignment in Assignment.objects.filter(
         teaching_assignment=ta
@@ -155,13 +160,16 @@ def calculate_student_progress(student, ta):
             "due_date": assignment.due_date
         })
 
-    # Pending Quizzes
+    # ================= PENDING QUIZZES =================
     pending_quizzes = []
 
     attempted_ids = QuizAttempt.objects.filter(
         student=student,
         quiz__teaching_assignment=ta
-    ).values_list("quiz_id", flat=True)
+    ).values_list(
+        "quiz_id",
+        flat=True
+    )
 
     for quiz in Quiz.objects.filter(
         teaching_assignment=ta
@@ -173,13 +181,26 @@ def calculate_student_progress(student, ta):
             "due_date": quiz.due_date
         })
 
-    overall_progress = round(
-        (
-            attendance_percent +
-            assignment_percent +
-            avg_quiz_score
-        ) / 3,
-        1
+    # ================= OVERALL PROGRESS =================
+    scores = []
+
+    if total_attendance > 0:
+        scores.append(attendance_percent)
+
+    if total_assignments > 0:
+        scores.append(assignment_percent)
+
+    total_quizzes = Quiz.objects.filter(
+        teaching_assignment=ta
+    ).count()
+
+    if total_quizzes > 0:
+        scores.append(avg_quiz_score)
+
+    overall_progress = (
+        round(sum(scores) / len(scores), 1)
+        if scores
+        else 0
     )
 
     return {
@@ -187,8 +208,10 @@ def calculate_student_progress(student, ta):
         "assignment_percent": assignment_percent,
         "quiz_average": avg_quiz_score,
         "overall_progress": overall_progress,
-        "pending_activities":
-            pending_assignments + pending_quizzes
+        "pending_activities": (
+            pending_assignments +
+            pending_quizzes
+        )
     }
 
 # ===================== ADMIN DASHBOARD =====================
@@ -202,6 +225,7 @@ def admin_dashboard(request):
         "total_users": User.objects.count(),
         "total_students": User.objects.filter(role="student").count(),
         "total_teachers": User.objects.filter(role="teacher").count(),
+        "total_parents": User.objects.filter(role="parent").count(),
         "total_courses": Course.objects.count(),
         "total_enrollments": Enrollment.objects.count(),
     })

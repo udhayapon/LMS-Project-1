@@ -5,7 +5,6 @@ import API from "../../api";
 import "../../styles/Attendance.css";
 
 const DOT_LABEL = { present: "P", absent: "A", duty_leave: "DL" };
-const HOURS     = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 const fmtDate = (iso) => {
   if (!iso) return "";
@@ -17,6 +16,12 @@ export default function AttendanceStudent() {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState("daily");
 
+  // class period numbers from admin's timetable (e.g. [1,2,3,4,5,6,7,8])
+  const [hours, setHours] = useState([]);
+
+  // top summary (semester start → today, all subjects)
+  const [summary, setSummary] = useState(null); // { present, absent, duty, total, pct }
+
   const [fromDate, setFromDate]   = useState("");
   const [toDate, setToDate]       = useState("");
   const [dailyData, setDailyData] = useState([]);
@@ -27,6 +32,71 @@ export default function AttendanceStudent() {
   const [cwTo, setCwTo]                   = useState("");
   const [courseReport, setCourseReport]   = useState([]);
   const [cwLoading, setCwLoading]         = useState(false);
+
+  // ── load the real periods admin created (class periods only) ──
+  useEffect(() => {
+    const loadPeriods = async () => {
+      try {
+        const res = await API.get("/timeslots/");
+        const slots = res.data || [];
+        const classHours = slots
+          .filter((s) => !s.is_break)               // breaks aren't marked for attendance
+          .map((s) => Number(s.period_no))
+          .filter((n) => !Number.isNaN(n))
+          .sort((a, b) => a - b);
+        // de-dup while keeping order
+        setHours([...new Set(classHours)]);
+      } catch (err) {
+        console.error("Load periods error:", err);
+        setHours([]);   // fall back below, derived from the data
+      }
+    };
+    loadPeriods();
+  }, []);
+
+  // ── summary: semester start → today, across all subjects ──
+  useEffect(() => {
+    const loadSummary = async () => {
+      try {
+        let fromParam = "";
+        try {
+          const semRes = await API.get("/semester/");
+          const sem = (semRes.data || [])[0];
+          if (sem && sem.start_date) fromParam = sem.start_date;
+        } catch { /* no semester → fall back to all-time below */ }
+
+        const today = new Date().toISOString().slice(0, 10);
+        // with a semester start: that range; otherwise all of the student's records
+        const url = fromParam
+          ? `/attendance/?from_date=${fromParam}&to_date=${today}`
+          : `/attendance/`;
+        const res = await API.get(url);
+        const data = res.data?.results || res.data || [];
+
+        let present = 0, absent = 0, duty = 0;
+        data.forEach((a) => {
+          if (a.status === "present") present++;
+          else if (a.status === "duty_leave") duty++;
+          else if (a.status === "absent") absent++;
+        });
+        const total = present + absent + duty;
+        const pct = total ? Math.round(((present + duty) / total) * 100) : 0;
+        setSummary({ present, absent, duty, total, pct });
+      } catch (err) {
+        console.error("Summary load error:", err);
+      }
+    };
+    loadSummary();
+  }, []);
+
+  // If periods haven't loaded (or none exist), fall back to the hours
+  // actually present in the fetched attendance so the table still shows.
+  const hoursFor = (records) => {
+    if (hours.length) return hours;
+    const found = [...new Set(records.map((a) => Number(a.hour)).filter((n) => !Number.isNaN(n)))]
+      .sort((a, b) => a - b);
+    return found.length ? found : [1, 2, 3, 4, 5, 6, 7, 8];
+  };
 
   const fetchDaily = async () => {
     if (!fromDate || !toDate) return alert("Please select both From Date and To Date.");
@@ -70,11 +140,12 @@ export default function AttendanceStudent() {
 
   const handlePrintDaily = () => {
     const user = JSON.parse(localStorage.getItem("user") || "{}");
-    const hourHeaders = HOURS.map(h => `<th>Hour ${h}</th>`).join("");
+    const printHours = hoursFor(dailyRaw);
+    const hourHeaders = printHours.map(h => `<th>Hour ${h}</th>`).join("");
     const rows = dailyData.map((row) => {
       const hasAny = Object.keys(row.hours).length > 0;
-      if (!hasAny) return `<tr><td class="date-col" style="color:#dc2626">${fmtDate(row.date)}</td><td colspan="10" style="text-align:center;color:#dc2626;font-style:italic">Holiday / No Classes</td></tr>`;
-      const cells = HOURS.map(h => {
+      if (!hasAny) return `<tr><td class="date-col" style="color:#dc2626">${fmtDate(row.date)}</td><td colspan="${printHours.length}" style="text-align:center;color:#dc2626;font-style:italic">Holiday / No Classes</td></tr>`;
+      const cells = printHours.map(h => {
         const s = row.hours[h];
         if (s === "present")    return `<td class="p">P</td>`;
         if (s === "absent")     return `<td class="a">A</td>`;
@@ -144,6 +215,9 @@ export default function AttendanceStudent() {
     const win = window.open("", "_blank"); win.document.write(html); win.document.close(); win.print();
   };
 
+  // hours to render in the on-screen daily table
+  const dailyHours = hoursFor(dailyRaw);
+
   return (
     <div className="app">
       <Navbar setOpen={setOpen} />
@@ -160,6 +234,30 @@ export default function AttendanceStudent() {
                   <p className="att-subtitle">View your attendance records</p>
                 </div>
               </div>
+
+              {/* ── Summary (semester to date, all subjects) ── */}
+              {summary && summary.total > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 12, margin: "0 0 18px" }}>
+                  <div style={{ background: "#fff", border: "1px solid #eaecf0", borderRadius: 14, padding: "16px 18px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "#667085", marginBottom: 6 }}>Overall attendance</div>
+                    <div style={{ fontSize: 30, fontWeight: 700, lineHeight: 1, color: summary.pct >= 75 ? "#16a34a" : summary.pct >= 60 ? "#d97706" : "#dc2626", fontVariantNumeric: "tabular-nums" }}>{summary.pct}%</div>
+                    <div style={{ fontSize: 12, color: "#98a2b3", marginTop: 6 }}>Since semester start</div>
+                  </div>
+                  <div style={{ background: "#fff", border: "1px solid #eaecf0", borderRadius: 14, padding: "16px 18px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "#667085", marginBottom: 6 }}>Present</div>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: "#16a34a", fontVariantNumeric: "tabular-nums" }}>{summary.present + summary.duty}</div>
+                    {summary.duty > 0 && <div style={{ fontSize: 11.5, color: "#98a2b3", marginTop: 5 }}>incl. {summary.duty} duty leave</div>}
+                  </div>
+                  <div style={{ background: "#fff", border: "1px solid #eaecf0", borderRadius: 14, padding: "16px 18px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "#667085", marginBottom: 6 }}>Absent</div>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: "#dc2626", fontVariantNumeric: "tabular-nums" }}>{summary.absent}</div>
+                  </div>
+                  <div style={{ background: "#fff", border: "1px solid #eaecf0", borderRadius: 14, padding: "16px 18px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "#667085", marginBottom: 6 }}>Total classes</div>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: "#0f172a", fontVariantNumeric: "tabular-nums" }}>{summary.total}</div>
+                  </div>
+                </div>
+              )}
 
               {/* ── Tabs ── */}
               <div className="att-tabs">
@@ -227,7 +325,7 @@ export default function AttendanceStudent() {
                           <thead>
                             <tr>
                               <th>Dates</th>
-                              {HOURS.map((h) => <th key={h} className="center">Hour {h}</th>)}
+                              {dailyHours.map((h) => <th key={h} className="center">Hour {h}</th>)}
                             </tr>
                           </thead>
                           <tbody>
@@ -239,9 +337,9 @@ export default function AttendanceStudent() {
                                     {fmtDate(row.date)}
                                   </td>
                                   {!hasAny ? (
-                                    <td colSpan={10} className="att-holiday-cell">Holiday / No Classes</td>
+                                    <td colSpan={dailyHours.length} className="att-holiday-cell">Holiday / No Classes</td>
                                   ) : (
-                                    HOURS.map((h) => {
+                                    dailyHours.map((h) => {
                                       const status = row.hours[h];
                                       return (
                                         <td key={h} className="center">

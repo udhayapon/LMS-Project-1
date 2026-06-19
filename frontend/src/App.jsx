@@ -26,7 +26,10 @@ import AttendanceStudent from "./features/attendance/AttendanceStudent";
 import StudentProgress from "./features/progress/StudentProgress";
 import TeacherProgress from "./features/progress/TeacherProgress";
 import AdminFees from "./features/fees/AdminFees";
-
+import Results from "./features/results/Results";
+import Calendar from "./features/calendar/Calendar";
+ import Announcements from "./features/announcements/Announcements";
+ 
 // ===== ADMIN =====
 import Dashboard from "./pages/Admin/Dashboard";
 import Students from "./pages/Admin/Students";
@@ -60,6 +63,7 @@ import ParentGrades from "./pages/Parent/ParentGrades";
 import ParentChat from "./pages/Parent/ParentChat";
 import ParentMessage from "./pages/Parent/ParentMessage";
 
+import HODDepartment from "./features/hod/HODDepartment";
 
 // ================= USER HELPER =================
 const getUser = () => {
@@ -266,33 +270,13 @@ function App() {
 
 
         {/* ================= TEACHING ASSIGNMENTS ================= */}
-        <Route path="/teaching-assignments" element={
-            <ProtectedRoute adminOnly={true}>
-
-              <TeachingAssignments />
-
-            </ProtectedRoute>
-          }
-        />
-
+        <Route path="/teaching-assignments" element={ <ProtectedRoute adminOnly={true}><TeachingAssignments /></ProtectedRoute> }/>
         <Route path="/teacher/attendance" element={<ProtectedRoute role="teacher"><AttendanceTeacher /></ProtectedRoute>} />
         <Route path="/student/attendance" element={<ProtectedRoute role="student"><AttendanceStudent /></ProtectedRoute>} />
+        <Route path="/results" element={<ProtectedRoute><Results /></ProtectedRoute>} />
 
         {/* ================= DEPARTMENTS ================= */}
-        <Route
-          path="/departments"
-          element={
-            <ProtectedRoute
-              adminOnly={true}
-            >
-
-              <Departments />
-
-            </ProtectedRoute>
-          }
-        />
-
-
+        <Route path="/departments" element={ <ProtectedRoute adminOnly={true} ><Departments /></ProtectedRoute> }/>
 
         {/* ================= TEACHER ================= */}
 
@@ -316,7 +300,9 @@ function App() {
         <Route path="/student/grades" element={<ProtectedRoute role="student" > <StudentGrades /> </ProtectedRoute> }/>
 
         <Route path="/student-progress" element={ <ProtectedRoute role="student"> <StudentProgress /> </ProtectedRoute>}/>
-
+        <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+       
+<Route path="/announcements" element={<ProtectedRoute><Announcements /></ProtectedRoute>} />
         {/* ================= PROFILE ================= */}
 
         <Route
@@ -374,41 +360,13 @@ function App() {
         /> 
          {/* ================= PARENT ================= */}
 
-<Route
-  path="/parent"
-  element={
-    <ProtectedRoute role="parent">
-      <ParentDashboard />
-    </ProtectedRoute>
-  }
-/>
+        <Route path="/parent" element={<ProtectedRoute role="parent"> <ParentDashboard /> </ProtectedRoute>}/>
 
-<Route
-  path="/parent/attendance"
-  element={
-    <ProtectedRoute role="parent">
-      <ParentAttendance />
-    </ProtectedRoute>
-  }
-/>
+       <Route path="/parent/attendance" element={ <ProtectedRoute role="parent"> <ParentAttendance /> </ProtectedRoute>}/>
 
-<Route
-  path="/parent/assignments"
-  element={
-    <ProtectedRoute role="parent">
-      <ParentAssignments />
-    </ProtectedRoute>
-  }
-/>
+       <Route path="/parent/assignments" element={<ProtectedRoute role="parent"> <ParentAssignments /> </ProtectedRoute>}/>
 
-<Route
-  path="/parent/fees"
-  element={
-    <ProtectedRoute role="parent">
-      <ParentFees />
-    </ProtectedRoute>
-  }
-/>
+      <Route path="/parent/fees" element={ <ProtectedRoute role="parent"> <ParentFees /> </ProtectedRoute>}/>
 
 <Route
   path="/parent/grades"
@@ -428,30 +386,14 @@ function App() {
   }
 />
 
-<Route
-  path="/parent/messages"
-  element={
-    <ProtectedRoute role="parent">
-      <ParentMessage />
-    </ProtectedRoute>
-  }
-/>
+        <Route path="/parent/messages" element={ <ProtectedRoute role="parent"> <ParentMessage /> </ProtectedRoute>}/>
 
-<Route path="/admin/fees" element={
-  <ProtectedRoute adminOnly={true}>
-    <AdminFees />
-  </ProtectedRoute>
-} />
+        <Route path="/admin/fees" element={<ProtectedRoute adminOnly={true}> <AdminFees /> </ProtectedRoute>} />
+
+        <Route path="/my-department" element={<HODDepartment />} />
+
         {/* ===== FALLBACK ===== */}
-        <Route
-          path="*"
-          element={
-            <Navigate
-              to="/"
-              replace
-            />
-          }
-        />
+        <Route path="*" element={ <Navigate to="/" replace/>}/>
 
       </Routes>
 

@@ -56,6 +56,13 @@ class Subject(models.Model):
         max_length=100
     )
 
+   # ================= SUBJECT CODE =================
+    code = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True
+    )
+
     # ================= YEAR =================
     year = models.ForeignKey(
         Year,

@@ -21,7 +21,8 @@ export default function Dashboard() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
-    total_users: 0, total_students: 0, total_teachers: 0, total_courses: 0, total_enrollments: 0,
+    total_users: 0, total_students: 0, total_teachers: 0,
+    total_parents: 0, total_courses: 0, total_enrollments: 0,
   });
 
   const greeting = () => {
@@ -38,20 +39,12 @@ export default function Dashboard() {
 
   const v = (n) => (loading ? "…" : n);
 
-  const fmtJoined = (iso) => {
-    if (!iso) return "";
-    const days = Math.floor((Date.now() - new Date(iso)) / 86400000);
-    if (days <= 0) return "today";
-    if (days === 1) return "1d ago";
-    if (days < 30) return `${days}d ago`;
-    return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
-  };
-
   const kpis = [
     { icon: "users", accent: "#0ea5e9", label: "Total users", value: v(stats.total_users),
       meta: `${stats.total_students} students · ${stats.total_teachers} teachers` },
     { icon: "student", accent: "#10b981", label: "Students", value: v(stats.total_students), to: "/students" },
     { icon: "teacher", accent: "#6366f1", label: "Teachers", value: v(stats.total_teachers), to: "/teachers" },
+    { icon: "users2", accent: "#8b5cf6", label: "Parents", value: v(stats.total_parents), to: "/parents-admin" },
     { icon: "book", accent: "#f59e0b", label: "Courses", value: v(stats.total_courses), to: "/courses" },
   ];
 
@@ -75,7 +68,9 @@ export default function Dashboard() {
               <h1 className="sd-hello">{greeting()}, {user?.username || "Admin"}</h1>
               <p className="sd-sub">Your LMS at a glance.</p>
 
-              <div className="sd-kpis">
+              {/* KPIs + Quick actions share one 4-col grid:
+                  row 1 = 4 stat cards, row 2 = Courses + Quick actions (span 3) */}
+              <div className="sd-kpis" style={{ alignItems: "start" }}>
                 {kpis.map((k, i) => (
                   <div
                     className={`sd-card ${k.to ? "clickable" : ""}`}
@@ -90,18 +85,18 @@ export default function Dashboard() {
                     {k.meta && <div className="sd-meta">{k.meta}</div>}
                   </div>
                 ))}
-              </div>
 
-              {/* quick actions — full width */}
-              <div className="sd-panel">
-                <div className="sd-pt">Quick actions</div>
-                <div className="sd-qa" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-                  {actions.map((a) => (
-                    <button key={a.label} onClick={() => navigate(a.to)}>
-                      <div className="sd-tile" style={{ background: a.accent + "18", color: a.accent }}>{I[a.icon]}</div>
-                      {a.label}
-                    </button>
-                  ))}
+                {/* Quick actions — fills the empty space beside Courses */}
+                <div className="sd-panel" style={{ gridColumn: "span 3", margin: 0 }}>
+                  <div className="sd-pt">Quick actions</div>
+                  <div className="sd-qa" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                    {actions.map((a) => (
+                      <button key={a.label} onClick={() => navigate(a.to)}>
+                        <div className="sd-tile" style={{ background: a.accent + "18", color: a.accent }}>{I[a.icon]}</div>
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

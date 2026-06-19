@@ -19,7 +19,8 @@ export default function Parents() {
   const [childQuery, setChildQuery] = useState("");
 
   const [editingId, setEditingId] = useState(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState("");               // search by parent name
+  const [studentSearch, setStudentSearch] = useState(""); // search by linked student
 
   // ================= LOAD =================
   const fetchData = async () => {
@@ -106,9 +107,20 @@ export default function Parents() {
       l.includes(id) ? l.filter((x) => x !== id) : [...l, id]
     );
 
+  // IDs already linked to ANY parent. While editing, the parent being
+  // edited is excluded so their own children stay selectable.
+  const takenIds = new Set(
+    parents
+      .filter((p) => p.profile_id !== editingId)
+      .flatMap((p) => p.children.map((c) => c.id))
+  );
+
+  // dropdown source: only students not yet allocated to a parent
+  const availableStudents = students.filter((s) => !takenIds.has(s.id));
+
   const childMatches = !childQuery.trim()
     ? []
-    : students.filter((s) =>
+    : availableStudents.filter((s) =>
         s.username.toLowerCase().includes(childQuery.trim().toLowerCase())
       );
 
@@ -117,9 +129,20 @@ export default function Parents() {
     .filter(Boolean);
 
   // ================= FILTER =================
-  const filteredParents = parents.filter((p) =>
-    p.username.toLowerCase().includes(search.toLowerCase())
-  );
+  // Parent-name filter AND student-name filter (both must pass).
+  const filteredParents = parents.filter((p) => {
+    const parentOk = p.username
+      .toLowerCase()
+      .includes(search.toLowerCase());
+
+    const studentOk =
+      !studentSearch.trim() ||
+      p.children.some((c) =>
+        c.username.toLowerCase().includes(studentSearch.trim().toLowerCase())
+      );
+
+    return parentOk && studentOk;
+  });
 
   return (
     <div className="app">
@@ -188,7 +211,7 @@ export default function Parents() {
                     >
                       {childMatches.length === 0 ? (
                         <div style={{ padding: "10px 12px", fontSize: 13, color: "#94a3b8" }}>
-                          No students found for "{childQuery}"
+                          No unallocated students match "{childQuery}"
                         </div>
                       ) : (
                         childMatches.map((s) => {
@@ -278,12 +301,18 @@ export default function Parents() {
             <div className="card">
 
               {/* ================= FILTERS ================= */}
-              <div className="top-filters" style={{ alignItems: "center" }}>
+              <div className="top-filters" style={{ alignItems: "center", gap: 10 }}>
                 <input
                   className="search-box"
                   placeholder="Search Parent..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
+                />
+                <input
+                  className="search-box"
+                  placeholder="Search Student..."
+                  value={studentSearch}
+                  onChange={(e) => setStudentSearch(e.target.value)}
                 />
                 <span style={{ marginLeft: "auto", fontSize: 14, color: "#64748b" }}>
                   Total Parents: {parents.length}

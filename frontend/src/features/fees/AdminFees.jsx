@@ -27,7 +27,7 @@ const SM = {
   overdue: { label: "Overdue", bg: "#fee2e2", color: "#b91c1c", bar: "#ef4444" },
 };
 
-const AV_BG = { paid: "#dbeafe", pending: "#fef3c7", overdue: "#fee2e2" };
+const AV_BG = { paid: "#eaf2fd", pending: "#fef3c7", overdue: "#fee2e2" };
 const AV_TC = { paid: "#1d4ed8", pending: "#92400e", overdue: "#b91c1c" };
 const GM = {
   overdue: { label: "Overdue", rowBg: "#fef2f2", rowColor: "#b91c1c" },
@@ -206,7 +206,7 @@ function DeptModal({ dept, fees, onClose, onEdit }) {
               {dlLabel && (
                 <button
                   onClick={() => downloadCSV(dlFees, `${(dept.filter || "all").replace(/\s+/g, "-").toLowerCase()}-${mf}-fees.csv`)}
-                  style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #bfdbfe",
+                  style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #d5e8fe",
                     background: "#eff6ff", fontSize: 11, fontWeight: 600, cursor: "pointer",
                     color: "#1d4ed8", display: "flex", alignItems: "center", gap: 5 }}
                 >

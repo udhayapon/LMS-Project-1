@@ -6,39 +6,24 @@ from django.conf.urls.static import static
 urlpatterns = [
 
     # ================= ADMIN =================
-    path(
-        'admin/',
-        admin.site.urls
-    ),
+    path('admin/',admin.site.urls ),
 
     # ================= USERS APP =================
-    path(
-        'api/users/',
-        include('users.urls')
-    ),
+    path('api/users/',include('users.urls')),
 
     # ================= COURSES APP =================
-    path(
-        'api/',
-        include('courses.urls')
-    ),
+    path('api/',include('courses.urls')),
 
     # ================= TIMETABLE APP =================
-    path(
-        'api/',
-        include('timetable.urls')
-    ),
+    path( 'api/',include('timetable.urls')),
 
     # ================= DRF LOGIN =================
-    path(
-        'api-auth/',
-        include('rest_framework.urls')
-    ),
+    path('api-auth/',include('rest_framework.urls')),
 
-    path(
-        'api/',
-        include('attendance.urls')
-    ),
+    path('api/',include('attendance.urls')),
+
+    path("api/", include("exams.urls")),
+    path("api/", include("events.urls")),
 
 ]
 
