@@ -19,8 +19,8 @@ export default function Courses() {
     return <p>Please login</p>;
   }
 
-  // ================= ADMIN =================
-  if (user.role === "admin") {
+  // ================= ADMIN / ACADEMIC ADMIN =================
+  if (user.role === "admin" || user.role === "academic_admin") {
 
     return <AdminCourses />;
   }

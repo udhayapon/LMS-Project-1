@@ -125,7 +125,10 @@ class UserSerializer(serializers.ModelSerializer):
         valid_roles = [
             'student',
             'teacher',
-            'admin'
+            'admin',
+            'accounts_admin',
+            'exam_admin',
+            'academic_admin',
         ]
 
         if value not in valid_roles:

@@ -55,11 +55,14 @@ class User(AbstractUser):
         ('teacher', 'Teacher'),
         ('admin', 'Admin'),
         ('parent', 'Parent'),
+        ('accounts_admin', 'Accounts Admin'),
+        ('exam_admin', 'Examination Admin'),
+        ('academic_admin', 'Academic Admin'),
     )
 
     # ================= ROLE =================
     role = models.CharField(
-        max_length=10,
+        max_length=30,
         choices=ROLE_CHOICES,
         default='student'
     )

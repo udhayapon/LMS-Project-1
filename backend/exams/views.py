@@ -27,6 +27,16 @@ from .serializers import (
 
 User = get_user_model()
 
+# ===================== EXAM ADMIN HELPER =====================
+# Roles allowed to manage exams: the full admin and the exam sub-admin.
+EXAM_ADMIN_ROLES = ("admin", "exam_admin")
+
+
+def is_exam_admin(user):
+    """True if the user can manage exams (full admin or exam sub-admin)."""
+    return getattr(user, "role", None) in EXAM_ADMIN_ROLES
+
+
 # ===================== INTERNAL ASSESSMENT =====================
 class InternalAssessmentViewSet(viewsets.ModelViewSet):
 
@@ -42,7 +52,7 @@ class InternalAssessmentViewSet(viewsets.ModelViewSet):
         # ---- role branches flow INTO shared filter, never return early ----
         if user.role == "teacher":
             qs = qs.filter(teaching_assignment__teacher=user)
-        # admin sees everything (no extra filter)
+        # admin / exam_admin see everything (no extra filter)
 
         # ?teaching_assignment= filter for both roles
         ta = self.request.query_params.get("teaching_assignment")
@@ -53,8 +63,8 @@ class InternalAssessmentViewSet(viewsets.ModelViewSet):
     # ================= LOCK (ADMIN — DECLARE) =================
     @action(detail=True, methods=["post"])
     def lock(self, request, pk=None):
-        if request.user.role != "admin":
-            raise PermissionDenied("Only admin can lock IA marks.")
+        if not is_exam_admin(request.user):
+            raise PermissionDenied("Only admin or exam admin can lock IA marks.")
         ia = self.get_object()
         ia.is_locked = True
         ia.save(update_fields=["is_locked"])
@@ -63,8 +73,8 @@ class InternalAssessmentViewSet(viewsets.ModelViewSet):
     # ================= UNLOCK (ADMIN) =================
     @action(detail=True, methods=["post"])
     def unlock(self, request, pk=None):
-        if request.user.role != "admin":
-            raise PermissionDenied("Only admin can unlock IA marks.")
+        if not is_exam_admin(request.user):
+            raise PermissionDenied("Only admin or exam admin can unlock IA marks.")
         ia = self.get_object()
         ia.is_locked = False
         ia.save(update_fields=["is_locked"])
@@ -196,7 +206,7 @@ def ia_template(request):
     Columns: student_id, roll_number, name, marks
     Query: teaching_assignment
     """
-    if request.user.role not in ("teacher", "admin"):
+    if request.user.role not in ("teacher", "admin", "exam_admin"):
         return Response({"detail": "Teachers/admin only."}, status=403)
 
     ta_id = request.query_params.get("teaching_assignment")
@@ -233,7 +243,7 @@ def ia_import(request):
     Blank marks = absent. Blocked if the slot is locked.
     Expects: file, teaching_assignment, number, max_marks
     """
-    if request.user.role not in ("teacher", "admin"):
+    if request.user.role not in ("teacher", "admin", "exam_admin"):
         return Response({"detail": "Teachers/admin only."}, status=403)
 
     f = request.FILES.get("file")
@@ -351,7 +361,7 @@ class SemesterResultViewSet(viewsets.ModelViewSet):
 
             return qs
 
-        # admin sees everything; optional filters for the entry screen
+        # admin / exam_admin see everything; optional filters for the entry screen
         semester = self.request.query_params.get("semester")
         if semester:
             qs = qs.filter(semester=semester)
@@ -371,8 +381,8 @@ class SemesterResultViewSet(viewsets.ModelViewSet):
         then upsert the ResultEntry for this subject (grade computed server-side).
         """
         user = request.user
-        if user.role != "admin":
-            raise PermissionDenied("Only admin can enter semester results.")
+        if not is_exam_admin(user):
+            raise PermissionDenied("Only admin or exam admin can enter semester results.")
 
         subject_id = request.data.get("subject")
         semester = request.data.get("semester")
@@ -417,8 +427,8 @@ class SemesterResultViewSet(viewsets.ModelViewSet):
     # ================= PUBLISH (ADMIN — DECLARE) =================
     @action(detail=True, methods=["post"])
     def publish(self, request, pk=None):
-        if request.user.role != "admin":
-            raise PermissionDenied("Only admin can publish results.")
+        if not is_exam_admin(request.user):
+            raise PermissionDenied("Only admin or exam admin can publish results.")
         result = self.get_object()
         result.is_published = True
         result.save(update_fields=["is_published"])
@@ -427,8 +437,8 @@ class SemesterResultViewSet(viewsets.ModelViewSet):
     # ================= UNPUBLISH (ADMIN) =================
     @action(detail=True, methods=["post"])
     def unpublish(self, request, pk=None):
-        if request.user.role != "admin":
-            raise PermissionDenied("Only admin can unpublish results.")
+        if not is_exam_admin(request.user):
+            raise PermissionDenied("Only admin or exam admin can unpublish results.")
         result = self.get_object()
         result.is_published = False
         result.save(update_fields=["is_published"])
@@ -444,8 +454,8 @@ def students_by_class(request):
     Used by the semester-result entry grid — the roster is class-wide,
     not tied to a single teaching assignment.
     """
-    if request.user.role != "admin":
-        return Response({"detail": "Only admin."}, status=403)
+    if not is_exam_admin(request.user):
+        return Response({"detail": "Only admin or exam admin."}, status=403)
 
     course = request.query_params.get("course")
     year = request.query_params.get("year")
@@ -514,8 +524,8 @@ def results_template(request):
     Admin downloads a CSV pre-filled with the class roster + a blank marks column.
     Columns: student_id, roll_number, name, marks
     """
-    if request.user.role != "admin":
-        return Response({"detail": "Only admin."}, status=403)
+    if not is_exam_admin(request.user):
+        return Response({"detail": "Only admin or exam admin."}, status=403)
 
     course = request.query_params.get("course")
     year = request.query_params.get("year")
@@ -546,8 +556,8 @@ def results_import(request):
     for one subject across all students (grade computed server-side).
     Expects: file (CSV), subject, semester, max_marks
     """
-    if request.user.role != "admin":
-        return Response({"detail": "Only admin."}, status=403)
+    if not is_exam_admin(request.user):
+        return Response({"detail": "Only admin or exam admin."}, status=403)
 
     f = request.FILES.get("file")
     subject_id = request.data.get("subject")
@@ -685,8 +695,8 @@ def hall_ticket_roster(request):
     """
     Admin view: students in a course/year/semester with eligibility status.
     """
-    if request.user.role != "admin":
-        return Response({"detail": "Only admin."}, status=403)
+    if not is_exam_admin(request.user):
+        return Response({"detail": "Only admin or exam admin."}, status=403)
 
     course = request.query_params.get("course")
     year = request.query_params.get("year")
@@ -724,8 +734,8 @@ def generate_attendance_fines(request):
     Admin creates an attendance-shortage fine for every below-75% student
     in a course/year/semester who doesn't already have one. One click, bulk.
     """
-    if request.user.role != "admin":
-        return Response({"detail": "Only admin."}, status=403)
+    if not is_exam_admin(request.user):
+        return Response({"detail": "Only admin or exam admin."}, status=403)
 
     course = request.data.get("course")
     year = request.data.get("year")
@@ -778,18 +788,18 @@ class ExamScheduleViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        if self.request.user.role != "admin":
-            raise PermissionDenied("Only admin can set exam schedules.")
+        if not is_exam_admin(self.request.user):
+            raise PermissionDenied("Only admin or exam admin can set exam schedules.")
         serializer.save()
 
     def perform_update(self, serializer):
-        if self.request.user.role != "admin":
-            raise PermissionDenied("Only admin can edit exam schedules.")
+        if not is_exam_admin(self.request.user):
+            raise PermissionDenied("Only admin or exam admin can edit exam schedules.")
         serializer.save()
 
     def perform_destroy(self, instance):
-        if self.request.user.role != "admin":
-            raise PermissionDenied("Only admin can delete exam schedules.")
+        if not is_exam_admin(self.request.user):
+            raise PermissionDenied("Only admin or exam admin can delete exam schedules.")
         instance.delete()
 
 # ===================== REVALUATION ====================
@@ -804,8 +814,8 @@ def set_revaluation_window(request):
     Admin opens/closes the revaluation window for a semester and sets the fee.
     Body: { semester, is_open, fee_amount }
     """
-    if request.user.role != "admin":
-        return Response({"detail": "Only admin."}, status=403)
+    if not is_exam_admin(request.user):
+        return Response({"detail": "Only admin or exam admin."}, status=403)
 
     semester = request.data.get("semester")
     is_open = request.data.get("is_open", False)
@@ -935,8 +945,8 @@ def confirm_revaluation_payment(request, pk):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def revaluation_review_list(request):
-    if request.user.role != "admin":
-        return Response({"detail": "Only admin."}, status=403)
+    if not is_exam_admin(request.user):
+        return Response({"detail": "Only admin or exam admin."}, status=403)
 
     qs = RevaluationRequest.objects.exclude(
         status="pending_payment"
@@ -950,8 +960,8 @@ def revaluation_review_list(request):
 @permission_classes([IsAuthenticated])
 def process_revaluation(request, pk):
     
-    if request.user.role != "admin":
-        return Response({"detail": "Only admin."}, status=403)
+    if not is_exam_admin(request.user):
+        return Response({"detail": "Only admin or exam admin."}, status=403)
 
     try:
         revreq = RevaluationRequest.objects.select_related("result_entry").get(id=pk)
@@ -1014,4 +1024,3 @@ def cancel_revaluation(request, pk):
 
     revreq.delete()
     return Response({"status": "cancelled"})
-

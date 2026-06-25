@@ -20,6 +20,9 @@ export default function Results() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const role = user.role;
 
+  // exam_admin gets the same exam controls as the full admin
+  const isExamAdmin = role === "admin" || role === "exam_admin";
+
   const ALL_TABS = [
     { id: "ia", label: "Internal Assessment" },
     { id: "sr", label: "Semester Result" },
@@ -27,7 +30,7 @@ export default function Results() {
     { id: "reval", label: "Revaluation" },
   ];
 
-  // teacher only enters IA; parent sees IA + semester result; student + admin see all
+  // teacher only enters IA; parent sees IA + semester result; student + admin/exam_admin see all
   let TABS;
   if (role === "teacher") {
     TABS = ALL_TABS.filter((t) => t.id === "ia");
@@ -44,26 +47,26 @@ export default function Results() {
     if (tab === "ia") {
       if (role === "teacher") return <IATeacher embedded />;
       if (role === "student") return <IAStudent embedded />;
-      if (role === "admin")   return <IAAdmin embedded />;
+      if (isExamAdmin)        return <IAAdmin embedded />;
       if (role === "parent")  return <IAParent embedded />;
     }
 
     // ===== Semester Result =====
     if (tab === "sr") {
-      if (role === "admin")   return <SRAdmin embedded />;
+      if (isExamAdmin)        return <SRAdmin embedded />;
       if (role === "student") return <SRStudent embedded />;
       if (role === "parent")  return <SRParent embedded />;
     }
 
     // ===== Hall Ticket =====
     if (tab === "ht") {
-      if (role === "admin")   return <HallTicketAdmin embedded />;
+      if (isExamAdmin)        return <HallTicketAdmin embedded />;
       if (role === "student") return <HallTicketStudent embedded />;
     }
 
     // ===== Revaluation =====
     if (tab === "reval") {
-      if (role === "admin")   return <RevaluationAdmin embedded />;
+      if (isExamAdmin)        return <RevaluationAdmin embedded />;
       if (role === "student") return <RevaluationStudent embedded />;
     }
 

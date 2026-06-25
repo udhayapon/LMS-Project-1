@@ -17,9 +17,12 @@ const AUD_LABEL = {
   parents:  "Parents",
 };
 
+// roles that can post announcements
+const POSTER_ROLES = ["admin", "accounts_admin", "exam_admin", "academic_admin"];
+
 export default function Announcements() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const isAdmin = (user.role || "").toLowerCase() === "admin";
+  const canPost = POSTER_ROLES.includes((user.role || "").toLowerCase());
 
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
@@ -95,7 +98,7 @@ export default function Announcements() {
                     {AUD_LABEL[a.audience] || "Everyone"}
                   </span>
                   <span style={{ fontSize: 17, fontWeight: 700, color: "#0f172a", flex: 1 }}>{a.title}</span>
-                  {isAdmin && (
+                  {canPost && (
                     <button style={S.del} onClick={() => remove(a.id)}>Delete</button>
                   )}
                 </div>
@@ -123,23 +126,23 @@ export default function Announcements() {
               <div style={{ marginBottom: 20 }}>
                 <h1 style={{ fontSize: 30, fontWeight: 800, margin: 0, color: "#0f172a" }}>Announcements</h1>
                 <p style={{ color: "#64748b", fontSize: 15, marginTop: 4 }}>
-                  {isAdmin ? "Post updates and choose who each one is for." : "Latest updates from the college."}
+                  {canPost ? "Post updates and choose who each one is for." : "Latest updates from the college."}
                 </p>
               </div>
 
-              {/* side-by-side for admin: form left, board right */}
+              {/* side-by-side for posters: form left, board right */}
               <div style={{
                 display: "grid",
-                gridTemplateColumns: isAdmin ? "minmax(0,340px) minmax(0,1fr)" : "1fr",
+                gridTemplateColumns: canPost ? "minmax(0,340px) minmax(0,1fr)" : "1fr",
                 gap: 20, alignItems: "start",
               }}>
 
-                {isAdmin && (
+                {canPost && (
                   <div style={S.card}>
                     <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 14px", color: "#0f172a" }}>New Announcement</h3>
 
                     <label style={S.label}>Title</label>
-                    <input style={S.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Exam timetable released" />
+                    <input style={S.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Fee payment due date" />
 
                     <label style={S.label}>Message</label>
                     <textarea style={{ ...S.input, minHeight: 100, resize: "vertical" }} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Write the announcement…" />

@@ -46,6 +46,9 @@ export default function AttendanceTeacher() {
   const [periodsLoading, setPeriodsLoading] = useState(false);
   const [semester, setSemester]         = useState(null);
 
+  // ── students with an approved OD covering the selected date ──
+  const [odStudentIds, setOdStudentIds] = useState([]);
+
   const [reportTA, setReportTA]         = useState("");
   const [fromDate, setFromDate]         = useState("");
   const [toDate, setToDate]             = useState("");
@@ -75,6 +78,17 @@ export default function AttendanceTeacher() {
     });
   }, []);
 
+  // ── approved-OD students for the selected date ──
+  useEffect(() => {
+    if (!selectedDate) { setOdStudentIds([]); return; }
+    API.get(`/attendance/od_students/?date=${selectedDate}`)
+      .then((res) => {
+        const ids = (res.data?.student_ids || []).map((id) => Number(id));
+        setOdStudentIds(ids);
+      })
+      .catch(() => setOdStudentIds([]));
+  }, [selectedDate]);
+
   // ── students when subject changes ──
   useEffect(() => {
     if (!selectedTA) { setStudents([]); return; }
@@ -85,11 +99,14 @@ export default function AttendanceTeacher() {
         const data = Array.isArray(raw) ? raw : (raw?.results || []);
         setStudents(data);
         const init = {};
-        data.forEach((e) => { init[e.student] = "present"; });
+        data.forEach((e) => {
+          // OD students default to duty_leave; everyone else present
+          init[e.student] = odStudentIds.includes(Number(e.student)) ? "duty_leave" : "present";
+        });
         setAttendance(init);
       })
       .finally(() => setLoading(false));
-  }, [selectedTA]);
+  }, [selectedTA, odStudentIds]);
 
   // ── periods for this class on the selected date (timetable + semester window) ──
   useEffect(() => {
@@ -155,13 +172,19 @@ export default function AttendanceTeacher() {
       });
   }, [selectedTA, selectedDate, selectedHour]);
 
+  const isOd = (studentId) => odStudentIds.includes(Number(studentId));
+
   const markAll = (status) => {
     const all = {};
-    students.forEach((e) => { all[e.student] = status; });
+    students.forEach((e) => {
+      // never override an approved-OD student
+      all[e.student] = isOd(e.student) ? "duty_leave" : status;
+    });
     setAttendance(all);
   };
 
   const setStatus = (studentId, status) => {
+    if (isOd(studentId)) return;   // locked — approved OD
     setAttendance((prev) => ({ ...prev, [studentId]: status }));
   };
 
@@ -171,7 +194,8 @@ export default function AttendanceTeacher() {
     setSaving(true);
     const records = students.map((e) => ({
       student: e.student,
-      status: attendance[e.student] || "absent",
+      // force duty_leave for approved-OD students regardless of UI state
+      status: isOd(e.student) ? "duty_leave" : (attendance[e.student] || "absent"),
     }));
     try {
       await API.post("/attendance/bulk_mark/", {
@@ -401,18 +425,26 @@ export default function AttendanceTeacher() {
                           </thead>
                           <tbody>
                             {students.map((e, idx) => {
-                              const status = attendance[e.student] || "absent";
+                              const od = isOd(e.student);
+                              const status = od ? "duty_leave" : (attendance[e.student] || "absent");
                               return (
                                 <tr key={e.id}>
                                   <td>{idx + 1}</td>
-                                  <td className="att-td-name">{e.student_name}</td>
+                                  <td className="att-td-name">
+                                    {e.student_name}
+                                    {od && <span className="att-od-tag">OD</span>}
+                                  </td>
                                   <td><span className="att-roll">{e.student_roll_no || "—"}</span></td>
                                   <td className="center">
-                                    <div className="att-status-group">
-                                      <button className={`att-status-btn present${status === "present" ? " active" : ""}`} onClick={() => setStatus(e.student, "present")}>P</button>
-                                      <button className={`att-status-btn absent${status === "absent" ? " active" : ""}`} onClick={() => setStatus(e.student, "absent")}>A</button>
-                                      <button className={`att-status-btn duty${status === "duty_leave" ? " active" : ""}`} onClick={() => setStatus(e.student, "duty_leave")}>DL</button>
-                                    </div>
+                                    {od ? (
+                                      <span className="att-status-btn duty active att-status-locked">DL · On Duty</span>
+                                    ) : (
+                                      <div className="att-status-group">
+                                        <button className={`att-status-btn present${status === "present" ? " active" : ""}`} onClick={() => setStatus(e.student, "present")}>P</button>
+                                        <button className={`att-status-btn absent${status === "absent" ? " active" : ""}`} onClick={() => setStatus(e.student, "absent")}>A</button>
+                                        <button className={`att-status-btn duty${status === "duty_leave" ? " active" : ""}`} onClick={() => setStatus(e.student, "duty_leave")}>DL</button>
+                                      </div>
+                                    )}
                                   </td>
                                 </tr>
                               );

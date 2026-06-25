@@ -63,7 +63,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(marked_by=self.request.user)
 
-   # ===================== BULK MARK =====================
+    # ===================== BULK MARK =====================
     @action(detail=False, methods=['post'], url_path='bulk_mark')
     def bulk_mark(self, request):
         teaching_assignment_id = request.data.get('teaching_assignment')
@@ -90,13 +90,13 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         for record in records:
             student_id = record.get('student')
             attendance_status = record.get('status', 'absent')
-            
+
             # ── block if student is not enrolled in this teaching assignment ──
             is_enrolled = Enrollment.objects.filter(
                 student_id=student_id,
                 teaching_assignment=ta
             ).exists()
-            
+
             if not is_enrolled:
                 continue  # skip this record silently
 
@@ -112,7 +112,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             )
             saved.append(obj.id)
 
-           # ── notify parent on absence / duty leave ──
+            # ── notify parent on absence / duty leave ──
             if attendance_status in ('absent', 'duty_leave'):
                 child = User.objects.get(id=student_id)
 
@@ -124,7 +124,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 else:
                     recs = Attendance.objects.filter(student_id=student_id)
                     total = recs.count()
-                    present = recs.filter(status='present').count()
+                    # OD rule: duty_leave counts as attended (on duty), not against the student
+                    present = recs.filter(status__in=['present', 'duty_leave']).count()
                     pct = round(present / total * 100) if total else 0
                     if pct < 75:
                         notify_parents(
@@ -142,4 +143,24 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK
         )
 
-     
+    # ===================== OD STUDENTS FOR A DATE =====================
+    @action(detail=False, methods=['get'], url_path='od_students')
+    def od_students(self, request):
+        """
+        Returns student IDs who have an APPROVED on-duty request covering
+        the given date. The teacher's mark screen uses this to pre-mark
+        those students as duty_leave.
+        """
+        date = request.query_params.get('date')
+        if not date:
+            return Response({'error': 'date is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .models import ODRequest
+        ids = list(
+            ODRequest.objects.filter(
+                status=ODRequest.Status.APPROVED,
+                from_date__lte=date,
+                to_date__gte=date,
+            ).values_list('student_id', flat=True)
+        )
+        return Response({'student_ids': ids})

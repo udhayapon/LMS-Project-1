@@ -197,7 +197,7 @@ def calendar_feed(request):
 # ===================== ANNOUNCEMENT =====================
 class AnnouncementViewSet(viewsets.ModelViewSet):
     """
-    Admin posts/edits/deletes announcements.
+    Admin and sub-admins (accounts/exam/academic) post/edit/delete announcements.
     Each announcement targets an audience; users see and are notified
     only for announcements meant for their group (+ 'everyone').
     """
@@ -205,11 +205,14 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
     serializer_class = AnnouncementSerializer
     permission_classes = [IsAuthenticated]
 
+    # roles allowed to post announcements
+    ADMIN_ROLES = ('admin', 'accounts_admin', 'exam_admin', 'academic_admin')
+
     def get_queryset(self):
         user = self.request.user
 
-        # admin sees all
-        if user.role == 'admin':
+        # admins + sub-admins see all
+        if user.role in self.ADMIN_ROLES:
             return Announcement.objects.all()
 
         # everyone else: 'everyone' announcements + their own group
@@ -224,8 +227,8 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        if self.request.user.role != 'admin':
-            raise ValidationError("Only admin can post announcements.")
+        if self.request.user.role not in self.ADMIN_ROLES:
+            raise ValidationError("You are not allowed to post announcements.")
         ann = serializer.save(posted_by=self.request.user)
 
         # notify only the chosen audience
@@ -249,11 +252,11 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
             )
 
     def perform_update(self, serializer):
-        if self.request.user.role != 'admin':
-            raise ValidationError("Only admin can edit announcements.")
+        if self.request.user.role not in self.ADMIN_ROLES:
+            raise ValidationError("You are not allowed to edit announcements.")
         serializer.save()
 
     def perform_destroy(self, instance):
-        if self.request.user.role != 'admin':
-            raise ValidationError("Only admin can delete announcements.")
+        if self.request.user.role not in self.ADMIN_ROLES:
+            raise ValidationError("You are not allowed to delete announcements.")
         instance.delete()

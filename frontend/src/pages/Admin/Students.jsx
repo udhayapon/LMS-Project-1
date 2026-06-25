@@ -13,7 +13,6 @@ export default function Students() {
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [courses, setCourses] = useState([]);
-  const [editingUser, setEditingUser] = useState(null);
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [importing, setImporting] = useState(false);
@@ -39,6 +38,19 @@ export default function Students() {
     semester: ""
   });
 
+  // ================= EDIT POPUP STATE =================
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState({
+    username: "",
+    password: "",
+    email: "",
+    role: "student",
+    department: "",
+    course: "",
+    year: "",
+    semester: ""
+  });
+
   // ================= LOAD =================
   useEffect(() => {
     fetchUsers();
@@ -46,7 +58,6 @@ export default function Students() {
     fetchCourses();
   }, []);
 
-  // ================= FETCH USERS =================
   const fetchUsers = async () => {
     try {
       const res = await API.get("users/");
@@ -57,7 +68,6 @@ export default function Students() {
     }
   };
 
-  // ================= FETCH DEPARTMENTS =================
   const fetchDepartments = async () => {
     try {
       const res = await API.get("users/departments/");
@@ -68,7 +78,6 @@ export default function Students() {
     }
   };
 
-  // ================= FETCH COURSES =================
   const fetchCourses = async () => {
     try {
       const res = await API.get("courses/");
@@ -112,10 +121,10 @@ export default function Students() {
     }
   };
 
-  // ================= EDIT =================
-  const handleEdit = (u) => {
-    setEditingUser(u);
-    setNewUser({
+  // ================= OPEN EDIT POPUP =================
+  const openEdit = (u) => {
+    setEditing(u);
+    setEditForm({
       username: u.username,
       password: "",
       email: u.email || "",
@@ -127,34 +136,36 @@ export default function Students() {
     });
   };
 
-  // ================= RESET FORM =================
-  const resetForm = () => {
-    setNewUser({
-      username: "",
-      password: "",
-      email: "",
-      role: "student",
-      department: "",
-      course: "",
-      year: "",
-      semester: ""
+  const closeEdit = () => {
+    setEditing(null);
+    setEditForm({
+      username: "", password: "", email: "", role: "student",
+      department: "", course: "", year: "", semester: ""
     });
   };
 
-  // ================= CANCEL =================
-  const handleCancelEdit = () => {
-    setEditingUser(null);
-    resetForm();
+  // ================= RESET FORM =================
+  const resetForm = () => {
+    setNewUser({
+      username: "", password: "", email: "", role: "student",
+      department: "", course: "", year: "", semester: ""
+    });
   };
 
   // ================= UPDATE =================
-  const handleUpdateStudent = async () => {
+  const saveEdit = async () => {
+    if (
+      !editForm.username || !editForm.email ||
+      !editForm.department || !editForm.course || !editForm.year || !editForm.semester
+    ) {
+      return alert("Fill all fields");
+    }
     try {
-      const payload = { ...newUser };
+      const payload = { ...editForm };
       if (!payload.password) delete payload.password;
-      await API.patch(`users/${editingUser.id}/`, payload);
+      await API.patch(`users/${editing.id}/`, payload);
       fetchUsers();
-      handleCancelEdit();
+      closeEdit();
       alert("Student updated");
     } catch (err) {
       const errorData = err.response?.data;
@@ -273,7 +284,7 @@ export default function Students() {
               <p>Manage student records</p>
             </div>
 
-            {/* ================= ACTION BUTTONS (collapsed by default) ================= */}
+            {/* ================= ACTION BUTTONS ================= */}
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <button
                 onClick={() => { setShowBulk((v) => !v); setShowPromote(false); }}
@@ -348,9 +359,9 @@ export default function Students() {
               </div>
             )}
 
-            {/* ================= FORM ================= */}
+            {/* ================= ADD FORM ================= */}
             <div className="card">
-              <h3>{editingUser ? "Edit Student" : "Add Student"}</h3>
+              <h3>Add Student</h3>
               <div className="form-grid">
                 <input
                   placeholder="Username"
@@ -365,7 +376,7 @@ export default function Students() {
                 />
                 <input
                   type="password"
-                  placeholder={editingUser ? "New Password (optional)" : "Password"}
+                  placeholder="Password"
                   value={newUser.password}
                   onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                 />
@@ -406,45 +417,39 @@ export default function Students() {
                     <option key={s} value={s}>Semester {s}</option>
                   ))}
                 </select>
-                <button
-                  className="btn-primary"
-                  onClick={editingUser ? handleUpdateStudent : handleAddStudent}
-                >
-                  {editingUser ? "Update Student" : "Create Student"}
+                <button className="btn-primary" onClick={handleAddStudent}>
+                  Create Student
                 </button>
-                {editingUser && (
-                  <button className="btn-delete" onClick={handleCancelEdit}>Cancel</button>
-                )}
               </div>
             </div>
 
             {/* ================= TABLE ================= */}
             <div className="card">
-               {/* ================= FILTERS ================= */}
-            <div className="top-filters" style={{ alignItems: "center" }}>
+              {/* ================= FILTERS ================= */}
+              <div className="top-filters" style={{ alignItems: "center" }}>
 
-              <input
-                className="search-box"
-                placeholder="Search Student..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+                <input
+                  className="search-box"
+                  placeholder="Search Student..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
 
-              <select
-                value={departmentFilter}
-                onChange={(e) => setDepartmentFilter(e.target.value)}
-              >
-                <option value="all">All Departments</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
+                <select
+                  value={departmentFilter}
+                  onChange={(e) => setDepartmentFilter(e.target.value)}
+                >
+                  <option value="all">All Departments</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
 
-              <span style={{ marginLeft: "auto", fontSize: "14px", color: "#64748b" }}>
-                Showing {filteredUsers.length} of {totalStudents}
-              </span>
+                <span style={{ marginLeft: "auto", fontSize: "14px", color: "#64748b" }}>
+                  Showing {filteredUsers.length} of {totalStudents}
+                </span>
 
-            </div>
+              </div>
 
               <div className="table-container">
 
@@ -471,7 +476,7 @@ export default function Students() {
                         <td>{u.semester ? `Semester ${u.semester}` : "-"}</td>
                         <td>
                           <div className="action-buttons">
-                            <button className="btn-edit" onClick={() => handleEdit(u)}>Edit</button>
+                            <button className="btn-edit" onClick={() => openEdit(u)}>Edit</button>
                             <button className="btn-delete" onClick={() => handleDelete(u.id)}>Delete</button>
                           </div>
                         </td>
@@ -490,6 +495,111 @@ export default function Students() {
           </div>
         </div>
       </div>
+
+      {/* ================= EDIT POPUP ================= */}
+      {editing && (
+        <div
+          onClick={closeEdit}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff", borderRadius: 14, width: 460, maxWidth: "92%",
+              maxHeight: "88vh", overflowY: "auto",
+              padding: "24px 24px 20px", boxShadow: "0 20px 50px rgba(0,0,0,.25)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <h3 style={{ margin: 0, fontSize: 18 }}>Edit student</h3>
+              <span onClick={closeEdit} style={{ cursor: "pointer", fontSize: 20, color: "#64748b" }}>×</span>
+            </div>
+            <p style={{ fontSize: 13, color: "#64748b", margin: "4px 0 18px" }}>
+              Update this student's details
+            </p>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={lbl}>Username</div>
+              <input value={editForm.username}
+                onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+                style={{ width: "100%" }} />
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={lbl}>Email</div>
+              <input value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                style={{ width: "100%" }} />
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={lbl}>Department</div>
+              <select value={editForm.department}
+                onChange={(e) => setEditForm({ ...editForm, department: Number(e.target.value) })}
+                style={{ width: "100%" }}>
+                <option value="">Select Department</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={lbl}>Course</div>
+              <select value={editForm.course}
+                onChange={(e) => setEditForm({ ...editForm, course: Number(e.target.value) })}
+                style={{ width: "100%" }}>
+                <option value="">Select Course</option>
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+              <div style={{ flex: 1 }}>
+                <div style={lbl}>Year</div>
+                <select value={editForm.year}
+                  onChange={(e) => setEditForm({ ...editForm, year: Number(e.target.value) })}
+                  style={{ width: "100%" }}>
+                  <option value="">Year</option>
+                  {[1, 2, 3, 4].map((y) => <option key={y} value={y}>Year {y}</option>)}
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={lbl}>Semester</div>
+                <select value={editForm.semester}
+                  onChange={(e) => setEditForm({ ...editForm, semester: Number(e.target.value) })}
+                  style={{ width: "100%" }}>
+                  <option value="">Semester</option>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => <option key={s} value={s}>Sem {s}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <div style={lbl}>New password <span style={{ color: "#94a3b8" }}>(leave blank to keep current)</span></div>
+              <input type="password" placeholder="••••••••"
+                value={editForm.password}
+                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                style={{ width: "100%" }} />
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button className="btn-delete" style={{ padding: "9px 18px" }} onClick={closeEdit}>
+                Cancel
+              </button>
+              <button className="btn-primary" style={{ padding: "9px 18px" }} onClick={saveEdit}>
+                Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -514,4 +624,11 @@ const activeBtn = {
   background: "#0f172a",
   color: "#fff",
   border: "1px solid #0f172a",
+};
+
+// label style for popup fields
+const lbl = {
+  fontSize: 13,
+  color: "#64748b",
+  marginBottom: 6,
 };

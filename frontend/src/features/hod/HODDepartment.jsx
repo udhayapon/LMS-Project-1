@@ -3,7 +3,10 @@ import { useEffect, useState, useMemo } from "react";
 import Sidebar from "../../components/Sidebar";
 import Navbar from "../../components/Navbar";
 import API from "../../api";
+import HOdTutors from "./HOdTutors";
+import OnDutyHod from "./OnDutyHod";
 import "../../App.css";
+import "../../styles/Attendance.css";
 
 const PAGE_SIZE = 20;
 
@@ -182,6 +185,8 @@ export default function HODDepartment() {
                     <button className={tab === "attendance" ? "on" : ""} onClick={() => setTab("attendance")}>Attendance</button>
                     <button className={tab === "teachers" ? "on" : ""} onClick={() => setTab("teachers")}>Faculty</button>
                     <button className={tab === "students" ? "on" : ""} onClick={() => setTab("students")}>Students</button>
+                    <button className={tab === "tutors" ? "on" : ""} onClick={() => setTab("tutors")}>Tutors</button>
+                    <button className={tab === "onduty" ? "on" : ""} onClick={() => setTab("onduty")}>On Duty</button>
                   </div>
 
                   {/* ===== OVERVIEW ===== */}
@@ -503,6 +508,13 @@ export default function HODDepartment() {
                       )}
                     </div>
                   )}
+
+                  {/* ===== TUTORS ===== */}
+                  {tab === "tutors" && <HOdTutors />}
+
+                  {/* ===== ON DUTY ===== */}
+                  {tab === "onduty" && <OnDutyHod />}
+
                 </>
               )}
 

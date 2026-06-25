@@ -12,6 +12,25 @@ const fmtDate = (iso) => {
   return `${d}-${m}-${y}`;
 };
 
+// ── On Duty: form categories (must match backend ODRequest.Category) ──
+const OD_CATEGORIES = [
+  { value: "paper_presentation", label: "Paper presentation" },
+  { value: "seminar", label: "Seminar / conference" },
+  { value: "placement", label: "Placement drive" },
+  { value: "sports", label: "Sports" },
+  { value: "nss_ncc", label: "NSS / NCC" },
+  { value: "other", label: "Other" },
+];
+
+// ── On Duty: status pill class + text from status + stage ──
+const odStatusBadge = (r) => {
+  if (r.status === "approved")  return { key: "approved",  text: "Approved" };
+  if (r.status === "rejected")  return { key: "rejected",  text: "Rejected" };
+  if (r.status === "cancelled") return { key: "cancelled", text: "Cancelled" };
+  if (r.stage === "awaiting_hod") return { key: "awaiting_hod", text: "Awaiting HOD" };
+  return { key: "awaiting_tutor", text: "Awaiting tutor" };
+};
+
 export default function AttendanceStudent() {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState("daily");
@@ -32,6 +51,16 @@ export default function AttendanceStudent() {
   const [cwTo, setCwTo]                   = useState("");
   const [courseReport, setCourseReport]   = useState([]);
   const [cwLoading, setCwLoading]         = useState(false);
+
+  // ── On Duty state ──
+  const [odCategory, setOdCategory]   = useState("paper_presentation");
+  const [odFrom, setOdFrom]           = useState("");
+  const [odTo, setOdTo]               = useState("");
+  const [odReason, setOdReason]       = useState("");
+  const [odProof, setOdProof]         = useState(null);
+  const [odList, setOdList]           = useState([]);
+  const [odLoading, setOdLoading]     = useState(false);
+  const [odSubmitting, setOdSubmitting] = useState(false);
 
   // ── load the real periods admin created (class periods only) ──
   useEffect(() => {
@@ -88,6 +117,59 @@ export default function AttendanceStudent() {
     };
     loadSummary();
   }, []);
+
+  // ── On Duty: load my requests ──
+  const loadOd = async () => {
+    setOdLoading(true);
+    try {
+      const res = await API.get("users/od/");
+      setOdList(res.data?.results || res.data || []);
+    } catch (err) {
+      console.error("OD load error:", err);
+    } finally {
+      setOdLoading(false);
+    }
+  };
+  useEffect(() => { loadOd(); }, []);
+
+  const submitOd = async () => {
+    if (!odFrom || !odTo) return alert("Please select both From and To dates.");
+    if (odTo < odFrom)    return alert("To date cannot be before From date.");
+    if (!odReason.trim()) return alert("Please enter a reason.");
+    setOdSubmitting(true);
+    try {
+      const fd = new FormData();
+      fd.append("from_date", odFrom);
+      fd.append("to_date", odTo);
+      fd.append("category", odCategory);
+      fd.append("reason", odReason.trim());
+      if (odProof) fd.append("proof", odProof);
+      // no Content-Type header — axios sets multipart boundary from FormData
+      await API.post("users/od/create/", fd);
+      setOdFrom(""); setOdTo(""); setOdReason("");
+      setOdProof(null); setOdCategory("paper_presentation");
+      const fileEl = document.getElementById("od-proof-input");
+      if (fileEl) fileEl.value = "";
+      await loadOd();
+      alert("On-duty request submitted.");
+    } catch (err) {
+      const d = err?.response?.data;
+      const msg = d?.detail || d?.non_field_errors?.[0] || "Could not submit request.";
+      alert(msg);
+    } finally {
+      setOdSubmitting(false);
+    }
+  };
+
+  const cancelOd = async (id) => {
+    if (!window.confirm("Cancel this on-duty request?")) return;
+    try {
+      await API.post(`users/od/${id}/cancel/`);
+      await loadOd();
+    } catch (err) {
+      alert(err?.response?.data?.detail || "Could not cancel.");
+    }
+  };
 
   // If periods haven't loaded (or none exist), fall back to the hours
   // actually present in the fetched attendance so the table still shows.
@@ -187,7 +269,7 @@ export default function AttendanceStudent() {
     const rows = courseReport.map((c, idx) => {
       const ahPct = c.total > 0 ? ((c.present / c.total) * 100).toFixed(2) : "0.00";
       const dlPct = c.total > 0 ? (((c.present + c.duty) / c.total) * 100).toFixed(2) : "0.00";
-      const isLow = parseFloat(ahPct) < 75;
+      const isLow = parseFloat(dlPct) < 75;
       return `<tr style="color:${isLow ? "#dc2626" : "#000"}">
         <td style="border:1px solid #ccc;padding:6px;text-align:center">${idx + 1}</td>
         <td style="border:1px solid #ccc;padding:8px 6px"><b>${c.subject}</b>${c.course ? ` (${c.course})` : ""}</td>
@@ -195,8 +277,8 @@ export default function AttendanceStudent() {
         <td style="border:1px solid #ccc;padding:6px;text-align:center">${c.present}</td>
         <td style="border:1px solid #ccc;padding:6px;text-align:center">${c.duty}</td>
         <td style="border:1px solid #ccc;padding:6px;text-align:center">${c.present + c.duty}</td>
-        <td style="border:1px solid #ccc;padding:6px;text-align:center;${isLow ? "color:#dc2626;font-weight:700" : "color:#16a34a;font-weight:700"}">${ahPct}%</td>
-        <td style="border:1px solid #ccc;padding:6px;text-align:center;font-weight:600">${dlPct}%</td>
+        <td style="border:1px solid #ccc;padding:6px;text-align:center;${parseFloat(ahPct) < 75 ? "color:#dc2626;font-weight:700" : "color:#16a34a;font-weight:700"}">${ahPct}%</td>
+        <td style="border:1px solid #ccc;padding:6px;text-align:center;${isLow ? "color:#dc2626;font-weight:700" : "color:#16a34a;font-weight:700"}">${dlPct}%</td>
       </tr>`;
     }).join("");
     const html = `<html><head><title>Course Wise Attendance</title>
@@ -210,13 +292,17 @@ export default function AttendanceStudent() {
       <div class="rtitle">Course Wise Attendance Report</div>
       <p style="font-size:13px;margin-bottom:10px"><b>Student:</b> ${user.username || "-"} &nbsp; <b>Roll No:</b> ${user.roll_number || "-"} &nbsp; <b>Date Range:</b> ${fmtDate(cwFrom)} to ${fmtDate(cwTo)}</p>
       <table><thead><tr><th>Sl.No</th><th>Course Name</th><th>TH</th><th>AH</th><th>DL</th><th>AH+DL</th><th>AH%</th><th>AH+DL%</th></tr></thead><tbody>${rows}</tbody></table>
-      <p style="font-size:11px;color:#888;margin-top:8px">* Red = below 75% | TH: Total Hours | AH: Attended | DL: Duty Leave</p>
+      <p style="font-size:11px;color:#888;margin-top:8px">* Red = below 75% (with duty leave) | TH: Total Hours | AH: Attended | DL: Duty Leave</p>
     </body></html>`;
     const win = window.open("", "_blank"); win.document.write(html); win.document.close(); win.print();
   };
 
   // hours to render in the on-screen daily table
   const dailyHours = hoursFor(dailyRaw);
+
+  const pctClass = summary
+    ? (summary.pct >= 75 ? "green" : summary.pct >= 60 ? "amber" : "red")
+    : "dark";
 
   return (
     <div className="app">
@@ -237,24 +323,24 @@ export default function AttendanceStudent() {
 
               {/* ── Summary (semester to date, all subjects) ── */}
               {summary && summary.total > 0 && (
-                <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 12, margin: "0 0 18px" }}>
-                  <div style={{ background: "#fff", border: "1px solid #eaecf0", borderRadius: 14, padding: "16px 18px" }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "#667085", marginBottom: 6 }}>Overall attendance</div>
-                    <div style={{ fontSize: 30, fontWeight: 700, lineHeight: 1, color: summary.pct >= 75 ? "#16a34a" : summary.pct >= 60 ? "#d97706" : "#dc2626", fontVariantNumeric: "tabular-nums" }}>{summary.pct}%</div>
-                    <div style={{ fontSize: 12, color: "#98a2b3", marginTop: 6 }}>Since semester start</div>
+                <div className="att-summary-grid">
+                  <div className="att-sum-card">
+                    <div className="att-sum-label">Overall attendance</div>
+                    <div className={`att-sum-value big ${pctClass}`}>{summary.pct}%</div>
+                    <div className="att-sum-hint">Since semester start</div>
                   </div>
-                  <div style={{ background: "#fff", border: "1px solid #eaecf0", borderRadius: 14, padding: "16px 18px" }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "#667085", marginBottom: 6 }}>Present</div>
-                    <div style={{ fontSize: 26, fontWeight: 700, color: "#16a34a", fontVariantNumeric: "tabular-nums" }}>{summary.present + summary.duty}</div>
-                    {summary.duty > 0 && <div style={{ fontSize: 11.5, color: "#98a2b3", marginTop: 5 }}>incl. {summary.duty} duty leave</div>}
+                  <div className="att-sum-card">
+                    <div className="att-sum-label">Present</div>
+                    <div className="att-sum-value green">{summary.present + summary.duty}</div>
+                    {summary.duty > 0 && <div className="att-sum-hint">incl. {summary.duty} duty leave</div>}
                   </div>
-                  <div style={{ background: "#fff", border: "1px solid #eaecf0", borderRadius: 14, padding: "16px 18px" }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "#667085", marginBottom: 6 }}>Absent</div>
-                    <div style={{ fontSize: 26, fontWeight: 700, color: "#dc2626", fontVariantNumeric: "tabular-nums" }}>{summary.absent}</div>
+                  <div className="att-sum-card">
+                    <div className="att-sum-label">Absent</div>
+                    <div className="att-sum-value red">{summary.absent}</div>
                   </div>
-                  <div style={{ background: "#fff", border: "1px solid #eaecf0", borderRadius: 14, padding: "16px 18px" }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "#667085", marginBottom: 6 }}>Total classes</div>
-                    <div style={{ fontSize: 26, fontWeight: 700, color: "#0f172a", fontVariantNumeric: "tabular-nums" }}>{summary.total}</div>
+                  <div className="att-sum-card">
+                    <div className="att-sum-label">Total classes</div>
+                    <div className="att-sum-value dark">{summary.total}</div>
                   </div>
                 </div>
               )}
@@ -273,6 +359,13 @@ export default function AttendanceStudent() {
                     <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
                   </svg>
                   Course Wise Report
+                </button>
+                <button className={`att-tab${view === "onduty" ? " active" : ""}`} onClick={() => setView("onduty")}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
+                  </svg>
+                  On Duty
                 </button>
               </div>
 
@@ -442,7 +535,8 @@ export default function AttendanceStudent() {
                             {courseReport.map((c, idx) => {
                               const ahPct = c.total > 0 ? ((c.present / c.total) * 100).toFixed(2) : "0.00";
                               const dlPct = c.total > 0 ? (((c.present + c.duty) / c.total) * 100).toFixed(2) : "0.00";
-                              const isLow = parseFloat(ahPct) < 75;
+                              const ahLow = parseFloat(ahPct) < 75;
+                              const isLow = parseFloat(dlPct) < 75;
                               return (
                                 <tr key={idx} className={isLow ? "att-row-low" : ""}>
                                   <td>{idx + 1}</td>
@@ -454,16 +548,100 @@ export default function AttendanceStudent() {
                                   <td className="center">{c.present}</td>
                                   <td className="center">{c.duty}</td>
                                   <td className="center">{c.present + c.duty}</td>
-                                  <td className={`center att-pct${isLow ? " low" : " good"}`}>{ahPct}%</td>
-                                  <td className="center att-pct">{dlPct}%</td>
+                                  <td className={`center att-pct${ahLow ? " low" : " good"}`}>{ahPct}%</td>
+                                  <td className={`center att-pct${isLow ? " low" : " good"}`}>{dlPct}%</td>
                                 </tr>
                               );
                             })}
                           </tbody>
                         </table>
                       </div>
-                      <p className="att-footnote">* Rows highlighted in red indicate attendance below 75%</p>
+                      <p className="att-footnote">* Rows highlighted in red indicate attendance below 75% (counting duty leave as attended)</p>
                     </>
+                  )}
+                </div>
+              )}
+
+              {/* ════════ ON DUTY ════════ */}
+              {view === "onduty" && (
+                <div className="att-card">
+                  <h2 className="att-card-title">Apply for On Duty</h2>
+
+                  <div className="att-od-form-grid">
+                    <div className="att-field">
+                      <label className="att-label">From Date</label>
+                      <input className="att-input att-input-date" type="date" value={odFrom} onChange={(e) => setOdFrom(e.target.value)} />
+                    </div>
+                    <div className="att-field">
+                      <label className="att-label">To Date</label>
+                      <input className="att-input att-input-date" type="date" value={odTo} onChange={(e) => setOdTo(e.target.value)} />
+                    </div>
+                    <div className="att-field">
+                      <label className="att-label">Category</label>
+                      <select className="att-input" value={odCategory} onChange={(e) => setOdCategory(e.target.value)}>
+                        {OD_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="att-field">
+                    <label className="att-label">Reason</label>
+                    <textarea
+                      className="att-od-textarea"
+                      value={odReason}
+                      onChange={(e) => setOdReason(e.target.value)}
+                      rows={2}
+                      placeholder="e.g. Presenting a paper at the national symposium, SSN College"
+                    />
+                  </div>
+
+                  <div className="att-field">
+                    <label className="att-label">Proof (optional)</label>
+                    <input id="od-proof-input" className="att-od-file" type="file" onChange={(e) => setOdProof(e.target.files?.[0] || null)} />
+                  </div>
+
+                  <div className="att-od-submit-row">
+                    <button className="att-btn-primary" onClick={submitOd} disabled={odSubmitting}>
+                      {odSubmitting ? "Submitting…" : "Submit request"}
+                    </button>
+                  </div>
+
+                  {/* My requests */}
+                  <h2 className="att-card-title att-od-list-title">My Requests</h2>
+                  {odLoading ? (
+                    <div className="att-state"><div className="att-spinner" /><p>Loading…</p></div>
+                  ) : odList.length === 0 ? (
+                    <div className="att-state"><p>You haven't submitted any on-duty requests yet.</p></div>
+                  ) : (
+                    <div className="att-od-list">
+                      {odList.map((r) => {
+                        const badge = odStatusBadge(r);
+                        return (
+                          <div key={r.id} className="att-od-item">
+                            <div className="att-od-row">
+                              <div className="att-od-main">
+                                <div className="att-od-cat">{r.category_label}</div>
+                                <div className="att-od-dates">{fmtDate(r.from_date)} → {fmtDate(r.to_date)}</div>
+                              </div>
+
+                              {r.reason && <div className="att-od-reason-cell">{r.reason}</div>}
+
+                              <div className="att-od-actions">
+                                {r.status === "pending" && (
+                                  <button className="att-btn-outline" onClick={() => cancelOd(r.id)}>Cancel request</button>
+                                )}
+                                <span className={`att-od-badge ${badge.key}`}>{badge.text}</span>
+                              </div>
+                            </div>
+
+                            {r.tutor_remark && <div className="att-od-remark"><b>Tutor:</b> {r.tutor_remark}</div>}
+                            {r.hod_remark && <div className="att-od-remark"><b>HOD:</b> {r.hod_remark}</div>}
+                            {r.status === "approved" && <div className="att-od-approved-note">Counted as duty leave in your attendance.</div>}
+                            {r.proof && <a href={r.proof} target="_blank" rel="noreferrer" className="att-od-proof">View proof</a>}
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               )}

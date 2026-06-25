@@ -812,3 +812,35 @@ class ConversationMessage(models.Model):
 
     def __str__(self):
         return f"{self.sender.username} -> {self.receiver.username}"
+    
+# ===================== YEAR TUTOR =====================
+class YearTutor(models.Model):
+    """One tutor (class advisor) per year of a course. No sections."""
+    teacher = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        limit_choices_to={'role': 'teacher'},
+        related_name='tutor_years'
+    )
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name='year_tutors'
+    )
+    year = models.ForeignKey(
+        Year,
+        on_delete=models.CASCADE,
+        related_name='year_tutors'
+    )
+    assigned_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['year'],
+                name='unique_tutor_per_year'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.teacher} → {self.course.name} Year {self.year.year_number}"

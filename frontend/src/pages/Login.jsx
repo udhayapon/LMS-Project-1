@@ -44,17 +44,25 @@ function Login() {
 
       if (data.is_superuser === true || role === "admin") {
         navigate("/dashboard");   // ADMIN
-      } 
+      }
+      else if (role === "accounts_admin") {
+        navigate("/admin/fees");  // ACCOUNTS ADMIN
+      }
+      else if (role === "exam_admin") {
+        navigate("/results");     // EXAMINATION ADMIN
+      }
+      else if (role === "academic_admin") {
+        navigate("/courses");     // ACADEMIC ADMIN
+      }
       else if (role === "teacher") {
         navigate("/teacher");     // TEACHER
-      } 
+      }
       else if (role === "student") {
         navigate("/student");     // STUDENT
-      } 
+      }
       else if (role === "parent") {
-  navigate("/parent");
-}
-
+        navigate("/parent");      // PARENT
+      }
       else {
         console.log("Unknown role:", data);
         setError("Invalid role");

@@ -355,7 +355,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         )
 
         # role-based visibility (narrow, don't return yet)
-        if user.role == "admin":
+        if user.role in ("admin", "academic_admin"):
             pass
         elif user.role == "teacher":
             queryset = queryset.filter(teaching_assignment__teacher=user)
@@ -1137,11 +1137,10 @@ class NotificationViewSet(viewsets.ModelViewSet):
 @permission_classes([IsAuthenticated])
 def generate_enrollments(request):
 
-    if request.user.role != "admin":
-
+    if request.user.role not in ("admin", "academic_admin"):
         return Response(
             {
-                "error": "Only admin can generate enrollments"
+                "error": "Only admin or academic admin can generate enrollments"
             },
             status=403
         )
@@ -1474,7 +1473,7 @@ class FeeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'admin':
+        if user.role in ('admin', 'accounts_admin'):
             return Fee.objects.all().select_related('student')
         if user.role == 'parent':
             from users.models import ParentProfile
@@ -1515,12 +1514,13 @@ class FeeViewSet(viewsets.ModelViewSet):
             fee.status = 'partial'
         fee.save()
         return Response(FeeSerializer(fee).data)
-    
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def generate_fees(request):
-    if request.user.role != 'admin':
-        return Response({'detail': 'Only admin can generate fees.'}, status=403)
+    if request.user.role not in ('admin', 'accounts_admin'):
+        return Response({'detail': 'Only admin or accounts admin can generate fees.'}, status=403)
 
     course_id = request.data.get('course')
     year = request.data.get('year')
@@ -1562,7 +1562,7 @@ def generate_fees(request):
         'created': created,
         'skipped': skipped,
     })
-    
+
 # ===================== PARENT DASHBOARD =====================
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -1846,7 +1846,7 @@ def manage_parents(request):
     return Response({'message': 'Parent created successfully.', 'profile_id': profile.id}, status=201)
 
 
-# ===================== UPDATE A PARENT'S CHILDREN (ADMIN) =====================
+# ===================== UPDATE A PARENT (ADMIN) =====================
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def update_parent_children(request, profile_id):
@@ -1855,11 +1855,29 @@ def update_parent_children(request, profile_id):
 
     from users.models import ParentProfile
     try:
-        profile = ParentProfile.objects.get(id=profile_id)
+        profile = ParentProfile.objects.select_related('user').get(id=profile_id)
     except ParentProfile.DoesNotExist:
         return Response({'detail': 'Parent profile not found.'}, status=404)
 
-    child_ids = request.data.get('children', [])
-    profile.children.set(User.objects.filter(id__in=child_ids, role='student'))
-    return Response({'message': 'Children updated.'})
+    parent = profile.user
 
+    # ----- update username (if provided and changed) -----
+    username = (request.data.get('username') or '').strip()
+    if username and username != parent.username:
+        if User.objects.filter(username=username).exclude(id=parent.id).exists():
+            return Response({'detail': 'That username already exists.'}, status=400)
+        parent.username = username
+
+    # ----- update password (only if a new one is sent) -----
+    password = request.data.get('password') or ''
+    if password:
+        parent.set_password(password)
+
+    parent.save()
+
+    # ----- update children (if the list is sent) -----
+    if 'children' in request.data:
+        child_ids = request.data.get('children', [])
+        profile.children.set(User.objects.filter(id__in=child_ids, role='student'))
+
+    return Response({'message': 'Parent updated.'})

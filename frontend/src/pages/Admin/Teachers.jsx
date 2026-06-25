@@ -14,9 +14,18 @@ export default function Teachers() {
   const [departments, setDepartments] = useState([]);
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
-  const [editingUser, setEditingUser] = useState(null);
 
   const [newUser, setNewUser] = useState({
+    username: "",
+    password: "",
+    email: "",
+    role: "teacher",
+    department: ""
+  });
+
+  // ================= EDIT POPUP STATE =================
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState({
     username: "",
     password: "",
     email: "",
@@ -63,7 +72,7 @@ export default function Teachers() {
       alert("Teacher created successfully");
     } catch (err) {
       console.log(err.response?.data);
-      alert(JSON.stringify(err.response?.data));
+      alert("Could not create teacher");
     }
   };
 
@@ -73,15 +82,17 @@ export default function Teachers() {
     try {
       await API.delete(`users/${id}/`);
       fetchUsers();
+      alert("Teacher removed");
     } catch (err) {
       console.log(err);
+      alert("Could not delete teacher");
     }
   };
 
-  // ================= EDIT =================
-  const handleEdit = (u) => {
-    setEditingUser(u);
-    setNewUser({
+  // ================= OPEN EDIT POPUP =================
+  const openEdit = (u) => {
+    setEditing(u);
+    setEditForm({
       username: u.username,
       password: "",
       email: u.email || "",
@@ -90,19 +101,27 @@ export default function Teachers() {
     });
   };
 
+  const closeEdit = () => {
+    setEditing(null);
+    setEditForm({ username: "", password: "", email: "", role: "teacher", department: "" });
+  };
+
   // ================= UPDATE =================
-  const handleUpdate = async () => {
+  const saveEdit = async () => {
+    if (!editForm.username || !editForm.email || !editForm.department) {
+      alert("Please fill all fields");
+      return;
+    }
     try {
-      const payload = { ...newUser };
+      const payload = { ...editForm };
       if (!payload.password) delete payload.password;
-      await API.patch(`users/${editingUser.id}/`, payload);
+      await API.patch(`users/${editing.id}/`, payload);
       fetchUsers();
-      resetForm();
-      setEditingUser(null);
+      closeEdit();
       alert("Teacher updated successfully");
     } catch (err) {
       console.log(err);
-      alert(JSON.stringify(err.response?.data));
+      alert("Could not update teacher");
     }
   };
 
@@ -115,12 +134,6 @@ export default function Teachers() {
       role: "teacher",
       department: ""
     });
-  };
-
-  // ================= CANCEL =================
-  const handleCancel = () => {
-    setEditingUser(null);
-    resetForm();
   };
 
   // ================= FILTER & SORT TEACHERS =================
@@ -156,10 +169,9 @@ export default function Teachers() {
               <p>Manage teacher records</p>
             </div>
 
-            
-            {/* ================= FORM ================= */}
+            {/* ================= ADD FORM ================= */}
             <div className="card">
-              <h3>{editingUser ? "Edit Teacher" : "Add Teacher"}</h3>
+              <h3>Add Teacher</h3>
               <div className="form-grid">
                 <input
                   placeholder="Username"
@@ -174,7 +186,7 @@ export default function Teachers() {
                 />
                 <input
                   type="password"
-                  placeholder={editingUser ? "New Password (optional)" : "Password"}
+                  placeholder="Password"
                   value={newUser.password}
                   onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                 />
@@ -187,50 +199,44 @@ export default function Teachers() {
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
-                <button
-                  className="btn-primary"
-                  onClick={editingUser ? handleUpdate : handleAddUser}
-                >
-                  {editingUser ? "Update Teacher" : "Create Teacher"}
+                <button className="btn-primary" onClick={handleAddUser}>
+                  Create Teacher
                 </button>
-                {editingUser && (
-                  <button className="btn-delete" onClick={handleCancel}>Cancel</button>
-                )}
               </div>
             </div>
 
             {/* ================= TABLE ================= */}
             <div className="card">
               {/* ================= FILTERS ================= */}
-            <div className="top-filters" style={{ alignItems: "center" }}>
+              <div className="top-filters" style={{ alignItems: "center" }}>
 
-              <input
-                className="search-box"
-                placeholder="Search Teacher..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+                <input
+                  className="search-box"
+                  placeholder="Search Teacher..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
 
-              <select
-                value={departmentFilter}
-                onChange={(e) => setDepartmentFilter(e.target.value)}
-              >
-                <option value="all">All Departments</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
+                <select
+                  value={departmentFilter}
+                  onChange={(e) => setDepartmentFilter(e.target.value)}
+                >
+                  <option value="all">All Departments</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
 
-              <span style={{ marginLeft: "auto", fontSize: "14px", color: "#64748b" }}>
-                Showing {teachers.length} of {totalTeachers}
-              </span>
+                <span style={{ marginLeft: "auto", fontSize: "14px", color: "#64748b" }}>
+                  Showing {teachers.length} of {totalTeachers}
+                </span>
 
-            </div>
+              </div>
 
               <div className="table-container">
 
                 <table>
-                  
+
                   <thead>
                     <tr>
                       <th>Teacher</th>
@@ -247,7 +253,7 @@ export default function Teachers() {
                         <td>{u.department_name}</td>
                         <td>
                           <div className="action-buttons">
-                            <button className="btn-edit" onClick={() => handleEdit(u)}>Edit</button>
+                            <button className="btn-edit" onClick={() => openEdit(u)}>Edit</button>
                             <button className="btn-delete" onClick={() => handleDelete(u.id)}>Delete</button>
                           </div>
                         </td>
@@ -266,6 +272,88 @@ export default function Teachers() {
           </div>
         </div>
       </div>
+
+      {/* ================= EDIT POPUP ================= */}
+      {editing && (
+        <div
+          onClick={closeEdit}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff", borderRadius: 14, width: 420, maxWidth: "90%",
+              padding: "24px 24px 20px", boxShadow: "0 20px 50px rgba(0,0,0,.25)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <h3 style={{ margin: 0, fontSize: 18 }}>Edit teacher</h3>
+              <span onClick={closeEdit} style={{ cursor: "pointer", fontSize: 20, color: "#64748b" }}>×</span>
+            </div>
+            <p style={{ fontSize: 13, color: "#64748b", margin: "4px 0 18px" }}>
+              Update this teacher's details
+            </p>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 13, color: "#64748b", marginBottom: 6 }}>Username</div>
+              <input
+                value={editForm.username}
+                onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+                style={{ width: "100%" }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 13, color: "#64748b", marginBottom: 6 }}>Email</div>
+              <input
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                style={{ width: "100%" }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 13, color: "#64748b", marginBottom: 6 }}>Department</div>
+              <select
+                value={editForm.department}
+                onChange={(e) => setEditForm({ ...editForm, department: Number(e.target.value) })}
+                style={{ width: "100%" }}
+              >
+                <option value="">Select Department</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 13, color: "#64748b", marginBottom: 6 }}>
+                New password <span style={{ color: "#94a3b8" }}>(leave blank to keep current)</span>
+              </div>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={editForm.password}
+                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                style={{ width: "100%" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button className="btn-delete" style={{ padding: "9px 18px" }} onClick={closeEdit}>
+                Cancel
+              </button>
+              <button className="btn-primary" style={{ padding: "9px 18px" }} onClick={saveEdit}>
+                Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
