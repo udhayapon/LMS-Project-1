@@ -6,6 +6,7 @@ import Navbar from "../../components/Navbar";
 import PeriodsPanel from "./PeriodsPanel";
 import HolidaysPanel from "./HolidaysPanel";
 import GridPanel from "./GridPanel";
+import ApprovalsPanel from "./ApprovalsPanel";
 
 import "../../App.css";
 import "../../styles/TimetableBuilder.css";
@@ -25,7 +26,7 @@ export default function TimetableBuilder() {
           <div className="tb">
             <header className="tb-head">
               <h1>Timetable Setup</h1>
-              <p>Set the daily periods first, then build each class's grid.</p>
+              <p>Set the daily periods first, then build each class's grid. HODs build their own department's timetables; you review and approve them here.</p>
             </header>
 
             <div className="tb-tabs">
@@ -47,11 +48,18 @@ export default function TimetableBuilder() {
               >
                 3 · Timetable Builder
               </button>
+              <button
+                className={tab === "approvals" ? "active" : ""}
+                onClick={() => setTab("approvals")}
+              >
+                4 · Approvals
+              </button>
             </div>
 
             {tab === "periods" && <PeriodsPanel />}
             {tab === "holidays" && <HolidaysPanel />}
             {tab === "grid" && <GridPanel goToPeriods={() => setTab("periods")} />}
+            {tab === "approvals" && <ApprovalsPanel />}
           </div>
         </div>
       </div>

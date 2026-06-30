@@ -61,6 +61,10 @@ import ParentMessage from "./pages/Parent/ParentMessage";
 import HODDepartment from "./features/hod/HODDepartment";
 import MyClass from "./features/tutor/MyClass";
 
+// ===== IQAC =====
+import FacultyContributions from "./features/iqac/FacultyContributions";
+import IqacDashboard from "./features/iqac/IqacDashboard";
+
 // ================= USER HELPER =================
 const getUser = () => {
 
@@ -127,6 +131,9 @@ function RoleRedirect() {
 
   if (role === "academic_admin")
     return (<Navigate to="/courses" replace/>);
+
+  if (role === "iqac_admin")
+    return (<Navigate to="/iqac" replace/>);
 
   if (role === "teacher")
     return (<Navigate to="/teacher" replace/>);
@@ -219,6 +226,9 @@ function App() {
         <Route path="/teacher-progress" element={ <ProtectedRoute role="teacher"> <TeacherProgress /></ProtectedRoute>}/>
         <Route path="/teacher/messages" element={ <ProtectedRoute role="teacher"> <TeacherChat /> </ProtectedRoute> }/>
 
+        {/* ================= MY CONTRIBUTIONS (IQAC) ================= */}
+        <Route path="/my-contributions" element={ <ProtectedRoute role="teacher"> <FacultyContributions /> </ProtectedRoute> }/>
+
 
         {/* ================= ASSIGNMENT SUBMISSIONS ================= */}
 
@@ -304,6 +314,9 @@ function App() {
         <Route path="/admin/fees" element={<ProtectedRoute roles={["admin", "accounts_admin"]}> <AdminFees /> </ProtectedRoute>} />
         <Route path="/my-department" element={<HODDepartment />} />
         <Route path="/my-class" element={<MyClass />} />
+
+        {/* ================= IQAC DASHBOARD ================= */}
+        <Route path="/iqac" element={<ProtectedRoute role="iqac_admin"> <IqacDashboard /> </ProtectedRoute>} />
 
         {/* ===== FALLBACK ===== */}
         <Route path="*" element={ <Navigate to="/" replace/>}/>

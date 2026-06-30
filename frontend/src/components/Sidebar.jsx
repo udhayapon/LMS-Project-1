@@ -83,6 +83,14 @@ export default function Sidebar({ open, setOpen }) {
     ];
   }
 
+  // ================= IQAC ADMIN =================
+  else if (user.role === "iqac_admin") {
+    menu = [
+      { name: "Faculty Participation", path: "/iqac" },
+      { name: "Profile", path: "/profile" },
+    ];
+  }
+
   // ================= TEACHER =================
   else if (user.role === "teacher") {
     menu = [
@@ -95,6 +103,7 @@ export default function Sidebar({ open, setOpen }) {
       { name: "Calendar", path: "/calendar" },
       { name: "Results", path: "/results" },
       { name: "Student Progress", path: "/teacher-progress" },
+      { name: "My Contributions", path: "/my-contributions" },
       { name: "Announcements", path: "/announcements" },
       { name: "Messages", path: "/teacher/messages" },
       { name: "Feedback History", path: "/feedback" },

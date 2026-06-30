@@ -58,6 +58,7 @@ class User(AbstractUser):
         ('accounts_admin', 'Accounts Admin'),
         ('exam_admin', 'Examination Admin'),
         ('academic_admin', 'Academic Admin'),
+        ('iqac_admin', 'IQAC Admin'),
     )
 
     # ================= ROLE =================
@@ -217,3 +218,61 @@ class ParentProfile(models.Model):
 
     def __str__(self):
         return self.user.username
+
+
+# ================= FACULTY PARTICIPATION (IQAC) =================
+# One row per activity a teacher records for NAAC/IQAC.
+# The teacher fills this in and uploads a proof file.
+# The IQAC admin only views and counts these — there is no approve/reject.
+class FacultyParticipation(models.Model):
+
+    # what kind of activity it was
+    CATEGORY_CHOICES = (
+        ('fdp', 'FDP / Training Attended'),
+        ('workshop_attended', 'Workshop / Seminar Attended'),
+        ('workshop_conducted', 'Workshop / Seminar Conducted'),
+        ('conference', 'Conference Paper Presented'),
+        ('journal', 'Journal Publication'),
+        ('certification', 'Certification / MOOC (NPTEL etc.)'),
+        ('guest_lecture', 'Guest Lecture Delivered'),
+        ('committee', 'Committee / Cell Membership'),
+        ('project', 'Project / Grant / Consultancy'),
+        ('other', 'Other'),
+    )
+
+    # the teacher's part in it
+    ROLE_CHOICES = (
+        ('attended', 'Attended'),
+        ('conducted', 'Conducted / Organized'),
+        ('presented', 'Presented'),
+        ('published', 'Published'),
+        ('member', 'Member'),
+        ('other', 'Other'),
+    )
+
+    faculty = models.ForeignKey(
+        'users.User',
+        on_delete=models.CASCADE,
+        related_name='participations',
+        limit_choices_to={'role': 'teacher'},
+    )
+
+    category = models.CharField(max_length=30, choices=CATEGORY_CHOICES)
+    title = models.CharField(max_length=255)            # e.g. "AI Workshop at IIT Madras"
+    organizer = models.CharField(max_length=255, blank=True)   # where / who ran it
+    activity_role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='attended')
+
+    date = models.DateField()
+    academic_year = models.CharField(max_length=9, blank=True)  # e.g. "2025-26"
+
+    # the uploaded proof (certificate / PDF / image)
+    proof = models.FileField(upload_to='faculty_proofs/', null=True, blank=True)
+
+    remarks = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date', '-created_at']
+
+    def __str__(self):
+        return f"{self.faculty.username} — {self.get_category_display()} — {self.title}"

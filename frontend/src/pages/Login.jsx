@@ -54,6 +54,9 @@ function Login() {
       else if (role === "academic_admin") {
         navigate("/courses");     // ACADEMIC ADMIN
       }
+      else if (role === "iqac_admin") {
+        navigate("/iqac");        // IQAC ADMIN
+      }
       else if (role === "teacher") {
         navigate("/teacher");     // TEACHER
       }

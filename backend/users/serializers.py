@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import (User,Department)
+from .models import (User, Department, FacultyParticipation)
 
 # ================= DEPARTMENT =================
 class DepartmentSerializer(serializers.ModelSerializer):
@@ -126,9 +126,11 @@ class UserSerializer(serializers.ModelSerializer):
             'student',
             'teacher',
             'admin',
+            'parent',
             'accounts_admin',
             'exam_admin',
             'academic_admin',
+            'iqac_admin',
         ]
 
         if value not in valid_roles:
@@ -190,3 +192,49 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
 
         return instance
+
+
+# ================= FACULTY PARTICIPATION (IQAC) =================
+class FacultyParticipationSerializer(serializers.ModelSerializer):
+
+    # read-only display helpers
+    faculty_name = serializers.CharField(source='faculty.username', read_only=True)
+    employee_id = serializers.CharField(source='faculty.employee_id', read_only=True)
+    department_name = serializers.CharField(source='faculty.department.name', read_only=True)
+    category_label = serializers.CharField(source='get_category_display', read_only=True)
+    role_label = serializers.CharField(source='get_activity_role_display', read_only=True)
+    proof_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FacultyParticipation
+        fields = [
+            'id',
+            'faculty',
+            'faculty_name',
+            'employee_id',
+            'department_name',
+            'category',
+            'category_label',
+            'title',
+            'organizer',
+            'activity_role',
+            'role_label',
+            'date',
+            'academic_year',
+            'proof',
+            'proof_url',
+            'remarks',
+            'created_at',
+        ]
+        extra_kwargs = {
+            # faculty is set from the logged-in user in the view, never sent by the client
+            'faculty': {'read_only': True},
+            'proof': {'write_only': True, 'required': False},
+        }
+
+    def get_proof_url(self, obj):
+        if not obj.proof:
+            return None
+        request = self.context.get('request')
+        url = obj.proof.url
+        return request.build_absolute_uri(url) if request else url

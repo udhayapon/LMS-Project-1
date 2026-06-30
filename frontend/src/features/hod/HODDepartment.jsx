@@ -5,16 +5,18 @@ import Navbar from "../../components/Navbar";
 import API from "../../api";
 import HOdTutors from "./HOdTutors";
 import OnDutyHod from "./OnDutyHod";
+import GridPanel from "../timetable/GridPanel";
 import "../../App.css";
 import "../../styles/Attendance.css";
+import "../../styles/TimetableBuilder.css";
 
 const PAGE_SIZE = 20;
 
-// donut ring (used by Results)
+// donut ring (used by Results + Class Performance)
 function Donut({ percent, color, label, centerText }) {
   const r = 35;
   const circ = 2 * Math.PI * r;
-  const offset = circ - (circ * percent) / 100;
+  const offset = circ - (circ * (percent || 0)) / 100;
   return (
     <svg width="92" height="92" viewBox="0 0 92 92">
       <circle cx="46" cy="46" r={r} fill="none" stroke="#eef0f4" strokeWidth="10" />
@@ -33,6 +35,10 @@ function Donut({ percent, color, label, centerText }) {
   );
 }
 
+// pass-rate colour: <75 danger, 75-85 warn, else healthy
+const passColor = (v) =>
+  v == null ? "#0f172a" : v < 75 ? "#dc2626" : v < 85 ? "#b45309" : "#15803d";
+
 export default function HODDepartment() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -46,10 +52,9 @@ export default function HODDepartment() {
   const [resultsLoaded, setResultsLoaded] = useState(false);
   const [semSel, setSemSel] = useState("all");
 
-  // attendance
-  const [attData, setAttData] = useState([]);
-  const [attLoaded, setAttLoaded] = useState(false);
-  const [attYear, setAttYear] = useState("all");
+  // class performance (cards in Overview; tutor map reused by Results)
+  const [classData, setClassData] = useState([]);
+  const [classLoaded, setClassLoaded] = useState(false);
 
   // student tab controls
   const [search, setSearch] = useState("");
@@ -73,30 +78,39 @@ export default function HODDepartment() {
   };
 
   useEffect(() => {
+    // class performance feeds the Overview cards AND the tutor label in Results
+    if ((tab === "overview" || tab === "results") && !classLoaded) {
+      API.get("users/hod-class-performance/")
+        .then((res) => setClassData(res.data?.departments || []))
+        .catch(() => setClassData([]))
+        .finally(() => setClassLoaded(true));
+    }
     if (tab === "results" && !resultsLoaded) {
       API.get("users/hod-results/")
         .then((res) => setResultsData(res.data?.departments || []))
         .catch(() => setResultsData([]))
         .finally(() => setResultsLoaded(true));
     }
-    if (tab === "attendance" && !attLoaded) {
-      API.get("users/hod-attendance/")
-        .then((res) => setAttData(res.data?.departments || []))
-        .catch(() => setAttData([]))
-        .finally(() => setAttLoaded(true));
-    }
-  }, [tab, resultsLoaded, attLoaded]);
+  }, [tab, resultsLoaded, classLoaded]);
 
   const dept = departments[active];
   const deptResults = resultsData[active];
-  const deptAtt = attData[active];
+  const deptClasses = classData[active];
+
+  // course ids for this department (limits the timetable Course dropdown)
+  const deptCourseIds = useMemo(() => {
+    if (dept?.courses?.length) return dept.courses.map((c) => c.id);
+    // fallback: derive from students if the backend "courses" key isn't present yet
+    const ids = new Set();
+    (dept?.students || []).forEach((s) => { if (s.course_id) ids.add(s.course_id); });
+    return [...ids];
+  }, [dept]);
 
   useEffect(() => {
     setSearch("");
     setYearFilter("all");
     setPage(1);
     setSemSel("all");
-    setAttYear("all");
   }, [active, tab]);
 
   const bucket = useMemo(() => {
@@ -114,11 +128,20 @@ export default function HODDepartment() {
     [bucket]
   );
 
-  const attRisk = useMemo(() => {
-    if (!deptAtt) return [];
-    if (attYear === "all") return deptAtt.at_risk;
-    return deptAtt.at_risk.filter((r) => String(r.year) === String(attYear));
-  }, [deptAtt, attYear]);
+  // year -> tutor name, from the class-performance data
+  const tutorByYear = useMemo(() => {
+    const m = {};
+    if (deptClasses?.classes) {
+      deptClasses.classes.forEach((c) => {
+        if (c.tutor_name) m[c.year] = c.tutor_name;
+      });
+    }
+    return m;
+  }, [deptClasses]);
+
+  // tutor for the selected semester's year (only when a single semester is picked)
+  const resultsTutor =
+    semSel !== "all" ? tutorByYear[Math.ceil(Number(semSel) / 2)] || null : null;
 
   const filteredStudents = useMemo(() => {
     if (!dept) return [];
@@ -135,12 +158,6 @@ export default function HODDepartment() {
 
   const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
   const pageStudents = filteredStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const yearCounts = useMemo(() => {
-    const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
-    if (dept) dept.students.forEach((s) => { if (counts[s.year] !== undefined) counts[s.year]++; });
-    return counts;
-  }, [dept]);
 
   const semYearLabel = (sem) => `Sem ${sem} · Year ${Math.ceil(sem / 2)}`;
 
@@ -182,7 +199,7 @@ export default function HODDepartment() {
                   <div className="sd-seg" style={{ marginBottom: 22 }}>
                     <button className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>Overview</button>
                     <button className={tab === "results" ? "on" : ""} onClick={() => setTab("results")}>Results</button>
-                    <button className={tab === "attendance" ? "on" : ""} onClick={() => setTab("attendance")}>Attendance</button>
+                    <button className={tab === "timetable" ? "on" : ""} onClick={() => setTab("timetable")}>Timetable</button>
                     <button className={tab === "teachers" ? "on" : ""} onClick={() => setTab("teachers")}>Faculty</button>
                     <button className={tab === "students" ? "on" : ""} onClick={() => setTab("students")}>Students</button>
                     <button className={tab === "tutors" ? "on" : ""} onClick={() => setTab("tutors")}>Tutors</button>
@@ -227,18 +244,74 @@ export default function HODDepartment() {
                         </div>
                       </div>
 
-                      {/* year-wise breakdown */}
-                      <div className="sd-panel" style={{ marginTop: 16 }}>
-                        <div className="sd-pt">Students by Year</div>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-                          {[1, 2, 3, 4].map((y) => (
-                            <div key={y} style={{ border: "1px solid #eaecf0", borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
-                              <div style={{ fontSize: 12, color: "#667085", fontWeight: 600 }}>Year {y}</div>
-                              <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{yearCounts[y]}</div>
-                            </div>
-                          ))}
+                      {/* ===== CLASS PERFORMANCE (pass rate per year) ===== */}
+                      {!classLoaded && (
+                        <div className="sd-panel" style={{ marginTop: 16 }}>Loading class performance…</div>
+                      )}
+
+                      {classLoaded && (!deptClasses || !deptClasses.classes?.length) && (
+                        <div className="sd-panel" style={{ marginTop: 16 }}>No class performance data for this department.</div>
+                      )}
+
+                      {classLoaded && deptClasses && deptClasses.classes?.length > 0 && (
+                        <div className="sd-panel" style={{ marginTop: 16 }}>
+                          <div className="sd-pt">Class Performance (pass rate)</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+                            {deptClasses.classes.map((c) => {
+                              const lowPass = c.pass_percent != null && c.pass_percent < 85;
+                              const pc = passColor(c.pass_percent);
+                              return (
+                                <div
+                                  key={c.year}
+                                  style={{ border: "1px solid #eaecf0", borderRadius: 12, padding: 14 }}
+                                >
+                                  {/* header */}
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                                    <span style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>Year {c.year}</span>
+                                    {lowPass && (
+                                      <span style={{ fontSize: 11, fontWeight: 600, color: "#b45309", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap" }}>
+                                        ⚠ low pass
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* pass donut */}
+                                  <div style={{ display: "flex", justifyContent: "center", margin: "8px 0 4px" }}>
+                                    <Donut
+                                      percent={c.pass_percent}
+                                      color={pc}
+                                      label="pass"
+                                      centerText={c.pass_percent != null ? `${c.pass_percent}%` : "—"}
+                                    />
+                                  </div>
+
+                                  {/* secondary stats */}
+                                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 10px", marginTop: 8 }}>
+                                    <div>
+                                      <div className="sd-label">Students</div>
+                                      <div style={{ fontSize: 18, fontWeight: 700 }}>{c.student_count}</div>
+                                    </div>
+                                    <div>
+                                      <div className="sd-label">Attendance</div>
+                                      <div style={{ fontSize: 18, fontWeight: 700, color: c.attendance_percent != null && c.attendance_percent < 75 ? "#dc2626" : "#0f172a" }}>
+                                        {c.attendance_percent != null ? `${c.attendance_percent}%` : "—"}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="sd-label">Tutor</div>
+                                      <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", lineHeight: 1.3, marginTop: 2 }}>{c.tutor_name || "—"}</div>
+                                    </div>
+                                    <div>
+                                      <div className="sd-label">Arrears</div>
+                                      <div style={{ fontSize: 18, fontWeight: 700, color: c.arrears > 0 ? "#dc2626" : "#0f172a" }}>{c.arrears}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </>
                   )}
 
@@ -302,7 +375,12 @@ export default function HODDepartment() {
                               </div>
 
                               <div className="sd-panel" style={{ marginTop: 16 }}>
-                                <div className="sd-pt">All subjects</div>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+                                  <div className="sd-pt" style={{ margin: 0 }}>All subjects</div>
+                                  {resultsTutor && (
+                                    <span style={{ fontSize: 12.5, color: "#667085" }}>Tutor: {resultsTutor}</span>
+                                  )}
+                                </div>
                                 <table className="sd-tbl">
                                   <thead>
                                     <tr>
@@ -333,74 +411,16 @@ export default function HODDepartment() {
                     </>
                   )}
 
-                  {/* ===== ATTENDANCE ===== */}
-                  {tab === "attendance" && (
-                    <>
-                      {!attLoaded && <div className="sd-panel">Loading attendance…</div>}
-
-                      {attLoaded && deptAtt && (
-                        <>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-                            <div className="sd-card">
-                              <div className="sd-label">Below 75%</div>
-                              <div className="sd-val" style={{ color: "#dc2626" }}>{deptAtt.below_75}</div>
-                            </div>
-                            <div className="sd-card">
-                              <div className="sd-label">Near 75% (75–80)</div>
-                              <div className="sd-val" style={{ color: "#b45309" }}>{deptAtt.near_75}</div>
-                            </div>
-                            <div className="sd-card">
-                              <div className="sd-label">Total students</div>
-                              <div className="sd-val">{deptAtt.total_students}</div>
-                            </div>
-                          </div>
-
-                          <div className="sd-panel" style={{ marginTop: 16 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
-                              <div className="sd-pt" style={{ margin: 0 }}>Low attendance — needs attention ({attRisk.length})</div>
-                              <select value={attYear} onChange={(e) => setAttYear(e.target.value)}>
-                                <option value="all">All Years</option>
-                                <option value="1">Year 1</option>
-                                <option value="2">Year 2</option>
-                                <option value="3">Year 3</option>
-                                <option value="4">Year 4</option>
-                              </select>
-                            </div>
-
-                            {attRisk.length > 0 ? (
-                              <table className="sd-tbl">
-                                <thead>
-                                  <tr>
-                                    <th>Student</th>
-                                    <th>Roll No</th>
-                                    <th>Year</th>
-                                    <th style={{ textAlign: "right" }}>Attendance</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {attRisk.map((r) => (
-                                    <tr key={r.id}>
-                                      <td>{r.username}</td>
-                                      <td className="sd-num">{r.roll_number || "-"}</td>
-                                      <td className="sd-num">{r.year ? `Year ${r.year}` : "-"}</td>
-                                      <td className="sd-num" style={{ textAlign: "right", fontWeight: 600, color: r.level === "danger" ? "#dc2626" : "#b45309" }}>
-                                        {r.percent}%
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            ) : (
-                              <div style={{ fontSize: 13, color: "#15803d" }}>✓ No students below 80% — attendance looks healthy.</div>
-                            )}
-                          </div>
-                        </>
-                      )}
-
-                      {attLoaded && !deptAtt && (
-                        <div className="sd-panel">No attendance data for this department.</div>
-                      )}
-                    </>
+                  {/* ===== TIMETABLE ===== */}
+                  {tab === "timetable" && (
+                    <div className="sd-panel">
+                      <div className="sd-pt">Department Timetable</div>
+                      <p style={{ fontSize: 13, color: "#667085", marginTop: -4, marginBottom: 14 }}>
+                        Build the weekly grid for your department's classes. Periods, semester and
+                        holidays are set by the admin.
+                      </p>
+                      <GridPanel courseFilter={deptCourseIds} />
+                    </div>
                   )}
 
                   {/* ===== FACULTY ===== */}

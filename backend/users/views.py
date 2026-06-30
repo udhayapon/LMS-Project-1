@@ -209,7 +209,7 @@ def login_view(request):
             "role":
                 role,
 
-            # ✅ DEPARTMENT
+            # DEPARTMENT
             "department":
                 user.department.id
                 if user.department
@@ -495,7 +495,7 @@ def my_department(request):
     result = []
     for dept in departments:
         teachers = User.objects.filter(role="teacher", department=dept).order_by("employee_id")
-        students = User.objects.filter(role="student", department=dept).order_by("roll_number")
+        students = User.objects.filter(role="student", department=dept).select_related("course").order_by("roll_number")
         student_ids = list(students.values_list("id", flat=True))
 
         # ----- teachers with their subjects -----
@@ -552,6 +552,13 @@ def my_department(request):
         evaluated = passed + failed
         pass_percent = round((passed / evaluated) * 100, 1) if evaluated else None
 
+        # ----- distinct courses in this department (for the timetable builder) -----
+        dept_courses = {}
+        for s in students:
+            if s.course_id and s.course_id not in dept_courses:
+                dept_courses[s.course_id] = s.course.name if s.course else f"Course {s.course_id}"
+        courses_list = [{"id": cid, "name": name} for cid, name in dept_courses.items()]
+
         result.append({
             "id": dept.id,
             "name": dept.name,
@@ -561,6 +568,7 @@ def my_department(request):
             "attendance_percent": attendance_percent,   # None if no records
             "pass_percent": pass_percent,                # None if no published results
             "arrears": failed,                           # students with at least one fail
+            "courses": courses_list,                     # [{id, name}] for timetable builder
             "teachers": teacher_list,
             "students": [
                 {
@@ -568,6 +576,7 @@ def my_department(request):
                     "username": s.username,
                     "email": s.email,
                     "roll_number": s.roll_number,
+                    "course_id": s.course_id,
                     "course_name": s.course.name if s.course else None,
                     "year": s.year,
                     "semester": s.semester,
@@ -577,6 +586,8 @@ def my_department(request):
         })
 
     return Response({"is_hod": True, "departments": result})
+
+
 # ===================== HOD: DEPARTMENT RESULTS =====================
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -677,6 +688,7 @@ def hod_results(request):
 
     return Response({"is_hod": True, "departments": result})
 
+
 # ===================== HOD: DEPARTMENT ATTENDANCE =====================
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -738,6 +750,7 @@ def hod_attendance(request):
         })
 
     return Response({"is_hod": True, "departments": result})
+
 
 # ===================== HOD TUTOR: HELPER =====================
 def _hod_course_ids(user):
@@ -897,6 +910,7 @@ def hod_remove_tutor(request, tutor_id):
     tutor.delete()
     return Response({"message": "Tutor removed."})
 
+
 # ===================== TUTOR: MY CLASS =====================
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -987,8 +1001,6 @@ def my_class(request):
         })
 
     return Response({"is_tutor": True, "classes": classes})
-
-
 
 
 def _tutor_student_ids(user):
@@ -1144,3 +1156,476 @@ def hod_od_action(request, pk):
         return Response({"detail": "action must be approve or reject."}, status=400)
     od.save()
     return Response(ODRequestSerializer(od).data)
+
+
+# ===================== HOD: CLASS PERFORMANCE =====================
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def hod_class_performance(request):
+    """
+    Per-year (class) performance for the HOD's department(s).
+
+    For each year (1..4) inside the department:
+      - student_count
+      - pass_percent   (students whose every published result entry passed)
+      - attendance_percent
+      - arrears        (students with at least one fail)
+      - tutor_name     (YearTutor for that year, across the dept's courses)
+      - subjects[]     (per-subject pass_rate + fail count)
+
+    Same calculation as my_department / hod_results, grouped by student.year
+    instead of rolled up for the whole department.
+    """
+    user = request.user
+
+    departments = Department.objects.filter(hod=user)
+    if not departments.exists():
+        return Response({"is_hod": False, "departments": []})
+
+    from courses.models import YearTutor
+    from attendance.models import Attendance
+    from exams.models import SemesterResult
+
+    PRESENT_STATUSES = ["present", "duty_leave"]
+
+    result = []
+    for dept in departments:
+        students = list(
+            User.objects.filter(role="student", department=dept)
+            .select_related("course")
+            .order_by("roll_number")
+        )
+
+        # course ids in this department (used to find the year's tutor)
+        dept_course_ids = {s.course_id for s in students if s.course_id}
+
+        # tutor name keyed by year_number (first match wins if multiple courses)
+        tutor_by_year = {}
+        for yt in (
+            YearTutor.objects
+            .filter(course_id__in=dept_course_ids)
+            .select_related("teacher", "year")
+        ):
+            yn = yt.year.year_number if yt.year else None
+            if yn is not None and yn not in tutor_by_year:
+                tutor_by_year[yn] = yt.teacher.username if yt.teacher else None
+
+        # group students by their year (integer)
+        years = {}
+        for s in students:
+            years.setdefault(s.year, []).append(s)
+
+        classes = []
+        for year_number in sorted(y for y in years.keys() if y is not None):
+            year_students = years[year_number]
+            student_ids = [s.id for s in year_students]
+
+            # ----- attendance % for the year -----
+            att_records = Attendance.objects.filter(student_id__in=student_ids)
+            att_total = att_records.count()
+            att_present = att_records.filter(status__in=PRESENT_STATUSES).count()
+            attendance_percent = (
+                round((att_present / att_total) * 100, 1) if att_total else None
+            )
+
+            # ----- pass/fail + per-subject breakdown (published results) -----
+            results = (
+                SemesterResult.objects
+                .filter(student_id__in=student_ids, is_published=True)
+                .prefetch_related("entries__subject")
+            )
+            passed = 0
+            failed = 0
+            subject_stats = {}
+            for sr in results:
+                entries = list(sr.entries.all())
+                if not entries:
+                    continue
+                if all(e.is_pass for e in entries):
+                    passed += 1
+                else:
+                    failed += 1
+                for e in entries:
+                    name = e.subject.name if e.subject else "Unknown"
+                    st = subject_stats.setdefault(name, {"pass": 0, "fail": 0})
+                    if e.is_pass:
+                        st["pass"] += 1
+                    else:
+                        st["fail"] += 1
+
+            evaluated = passed + failed
+            pass_percent = (
+                round((passed / evaluated) * 100, 1) if evaluated else None
+            )
+
+            subjects = []
+            for name, st in subject_stats.items():
+                total = st["pass"] + st["fail"]
+                pass_rate = round((st["pass"] / total) * 100, 1) if total else 0
+                subjects.append({
+                    "subject": name,
+                    "pass_rate": pass_rate,
+                    "failed": st["fail"],
+                })
+            subjects.sort(key=lambda x: x["pass_rate"])   # weakest subject first
+
+            classes.append({
+                "year": year_number,
+                "student_count": len(year_students),
+                "pass_percent": pass_percent,           # None if no published results
+                "attendance_percent": attendance_percent,  # None if no records
+                "avg_mark": None,                       # no numeric mark field on entries
+                "arrears": failed,
+                "tutor_name": tutor_by_year.get(year_number),
+                "subjects": subjects,
+            })
+
+        result.append({
+            "id": dept.id,
+            "name": dept.name,
+            "classes": classes,
+        })
+
+    return Response({"is_hod": True, "departments": result})
+
+
+# ===================== TUTOR: STUDENT MARK REPORT =====================
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def tutor_student_report(request, student_id):
+    """
+    Full mark report for ONE student in the tutor's class — current semester
+    only, published results only. Per subject: marks / max, grade, pass/fail.
+
+    Reuses _tutor_student_ids() so a tutor can only open a student who is
+    actually in their assigned class(es); anyone else returns 403.
+    """
+    from exams.models import SemesterResult
+
+    # the student must belong to this tutor's class
+    allowed_ids = set(_tutor_student_ids(request.user))
+    if student_id not in allowed_ids:
+        return Response(
+            {"detail": "This student is not in your class."},
+            status=403,
+        )
+
+    try:
+        student = User.objects.get(id=student_id, role="student")
+    except User.DoesNotExist:
+        return Response({"detail": "Student not found."}, status=404)
+
+    # the student's current semester only
+    semester = student.semester
+
+    sem_result = (
+        SemesterResult.objects
+        .filter(student=student, semester=semester, is_published=True)
+        .prefetch_related("entries__subject")
+        .first()
+    )
+
+    subjects = []
+    passed = 0
+    failed = 0
+    if sem_result:
+        for e in sem_result.entries.all():
+            if e.is_pass:
+                passed += 1
+            else:
+                failed += 1
+            subjects.append({
+                "subject": e.subject.name if e.subject else "Unknown",
+                "code": (e.subject.code if e.subject and e.subject.code else ""),
+                "marks_obtained": e.marks_obtained,   # may be None (absent / not entered)
+                "max_marks": e.max_marks,
+                "grade": e.grade,
+                "is_pass": e.is_pass,
+            })
+
+    return Response({
+        "student": {
+            "id": student.id,
+            "username": student.username,
+            "roll_number": student.roll_number,
+            "semester": semester,
+        },
+        "semester": semester,
+        "published": bool(sem_result),   # False -> results not declared yet
+        "passed": passed,
+        "failed": failed,
+        "subjects": subjects,
+    })
+
+
+# ===================== TUTOR: CLASS MARK SHEET (BY SEMESTER) =====================
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_class_marksheet(request):
+    """
+    Printable class mark sheet for the tutor — grouped by semester so the
+    teacher can pick which semester to print. Published results only.
+
+    Per class: list of semesters that have data, and for each semester a
+    full matrix (every class student x every subject) with marks/max,
+    grade, pass/fail, and an overall result per student.
+    """
+    user = request.user
+
+    from courses.models import YearTutor
+    from exams.models import SemesterResult
+
+    tutor_links = (
+        YearTutor.objects.filter(teacher=user).select_related("course", "year")
+    )
+    if not tutor_links.exists():
+        return Response({"is_tutor": False, "classes": []})
+
+    classes = []
+    for link in tutor_links:
+        course = link.course
+        year_number = link.year.year_number
+
+        students = list(
+            User.objects.filter(role="student", course=course, year=year_number)
+            .order_by("roll_number")
+        )
+        student_ids = [s.id for s in students]
+
+        # every published result for the class, any semester
+        results = (
+            SemesterResult.objects
+            .filter(student_id__in=student_ids, is_published=True)
+            .prefetch_related("entries__subject")
+        )
+
+        # group by semester: subjects seen + per-student marks
+        by_sem = {}   # sem -> {"subjects": set, "per_student": {sid: {...}}}
+        for sr in results:
+            sem = sr.semester
+            bucket = by_sem.setdefault(sem, {"subjects": set(), "per_student": {}})
+            entries = list(sr.entries.all())
+            marks = {}
+            passed = 0
+            failed = 0
+            for e in entries:
+                name = e.subject.name if e.subject else "Unknown"
+                bucket["subjects"].add(name)
+                if e.is_pass:
+                    passed += 1
+                else:
+                    failed += 1
+                marks[name] = {
+                    "obtained": e.marks_obtained,   # None = absent
+                    "max": e.max_marks,
+                    "grade": e.grade,
+                    "is_pass": e.is_pass,
+                }
+            bucket["per_student"][sr.student_id] = {
+                "marks": marks,
+                "passed": passed,
+                "failed": failed,
+                "has": bool(entries),
+            }
+
+        semesters = sorted(by_sem.keys())
+
+        by_semester = {}
+        for sem in semesters:
+            bucket = by_sem[sem]
+            subjects = sorted(bucket["subjects"])
+            rows = []
+            for s in students:
+                ps = bucket["per_student"].get(s.id)
+                if ps and ps["has"]:
+                    result = "fail" if ps["failed"] > 0 else "pass"
+                    rows.append({
+                        "id": s.id,
+                        "username": s.username,
+                        "roll_number": s.roll_number,
+                        "marks": ps["marks"],
+                        "result": result,
+                        "passed": ps["passed"],
+                        "failed": ps["failed"],
+                    })
+                else:
+                    # student has no published result for this semester
+                    rows.append({
+                        "id": s.id,
+                        "username": s.username,
+                        "roll_number": s.roll_number,
+                        "marks": {},
+                        "result": "pending",
+                        "passed": 0,
+                        "failed": 0,
+                    })
+            by_semester[str(sem)] = {"subjects": subjects, "students": rows}
+
+        classes.append({
+            "course_id": course.id,
+            "course_name": course.name,
+            "year_number": year_number,
+            "semesters": semesters,         # e.g. [3, 4]
+            "by_semester": by_semester,     # {"3": {...}, "4": {...}}
+        })
+
+    return Response({"is_tutor": True, "classes": classes})
+
+# =====================================================
+#  FACULTY PARTICIPATION (IQAC)
+#  Paste these functions at the END of users/views.py.
+#  Top-level functions, local imports — no change to existing imports.
+#
+#  Then register the routes in users/urls.py (shown after this file),
+#  and add the names to the `from .views import (...)` list.
+# =====================================================
+
+# ---------- helper: who is the IQAC admin ----------
+def _is_iqac(user):
+    return getattr(user, "role", "") == "iqac_admin" or user.is_superuser
+
+
+# ---------- TEACHER: add an activity (with proof upload) ----------
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def participation_create(request):
+    """A teacher logs one of their own activities. Proof file optional."""
+    from .serializers import FacultyParticipationSerializer
+
+    if request.user.role != "teacher":
+        return Response({"detail": "Only teachers can add participation."}, status=403)
+
+    ser = FacultyParticipationSerializer(data=request.data, context={"request": request})
+    ser.is_valid(raise_exception=True)
+    ser.save(faculty=request.user)   # always the logged-in teacher
+    return Response(ser.data, status=201)
+
+
+# ---------- TEACHER: list their own activities ----------
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def participation_my(request):
+    """The logged-in teacher's own activities."""
+    from .models import FacultyParticipation
+    from .serializers import FacultyParticipationSerializer
+
+    qs = FacultyParticipation.objects.filter(faculty=request.user)
+    ser = FacultyParticipationSerializer(qs, many=True, context={"request": request})
+    return Response(ser.data)
+
+
+# ---------- TEACHER: delete one of their own (mistake fix) ----------
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def participation_delete(request, pk):
+    """A teacher removes one of their own activities."""
+    from .models import FacultyParticipation
+
+    try:
+        item = FacultyParticipation.objects.get(pk=pk, faculty=request.user)
+    except FacultyParticipation.DoesNotExist:
+        return Response({"detail": "Not found."}, status=404)
+
+    item.delete()
+    return Response({"detail": "Deleted."})
+
+
+# ---------- IQAC: view ALL activities (with optional filters) ----------
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def iqac_participation_list(request):
+    """
+    IQAC admin sees every teacher's activities.
+    Optional filters: ?teacher=<id>  ?category=<key>  ?year=<2025-26>  ?department=<id>
+    """
+    from .models import FacultyParticipation
+    from .serializers import FacultyParticipationSerializer
+
+    if not _is_iqac(request.user):
+        return Response({"detail": "Only the IQAC admin can view this."}, status=403)
+
+    qs = FacultyParticipation.objects.select_related("faculty", "faculty__department")
+
+    teacher = request.query_params.get("teacher")
+    category = request.query_params.get("category")
+    year = request.query_params.get("year")
+    department = request.query_params.get("department")
+
+    if teacher:
+        qs = qs.filter(faculty_id=teacher)
+    if category:
+        qs = qs.filter(category=category)
+    if year:
+        qs = qs.filter(academic_year=year)
+    if department:
+        qs = qs.filter(faculty__department_id=department)
+
+    ser = FacultyParticipationSerializer(qs, many=True, context={"request": request})
+    return Response(ser.data)
+
+
+# ---------- IQAC: the counts / scoreboard ----------
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def iqac_participation_summary(request):
+    """
+    Totals for the IQAC dashboard:
+      - overall total activities
+      - per-category counts
+      - per-teacher counts (with department)
+    Optional ?year=<2025-26> to scope to one academic year.
+    """
+    from .models import FacultyParticipation
+
+    if not _is_iqac(request.user):
+        return Response({"detail": "Only the IQAC admin can view this."}, status=403)
+
+    qs = FacultyParticipation.objects.select_related("faculty", "faculty__department")
+
+    year = request.query_params.get("year")
+    if year:
+        qs = qs.filter(academic_year=year)
+
+    # build readable category labels from the model choices
+    cat_labels = dict(FacultyParticipation.CATEGORY_CHOICES)
+
+    # ----- per-category counts -----
+    category_counts = {}
+    # ----- per-teacher counts -----
+    teacher_map = {}
+    # ----- list of academic years present (for a dropdown) -----
+    years = set()
+
+    total = 0
+    for p in qs:
+        total += 1
+
+        category_counts[p.category] = category_counts.get(p.category, 0) + 1
+
+        if p.academic_year:
+            years.add(p.academic_year)
+
+        tid = p.faculty_id
+        if tid not in teacher_map:
+            teacher_map[tid] = {
+                "id": tid,
+                "name": p.faculty.username if p.faculty else "—",
+                "employee_id": p.faculty.employee_id if p.faculty else "",
+                "department": p.faculty.department.name if (p.faculty and p.faculty.department) else "—",
+                "count": 0,
+            }
+        teacher_map[tid]["count"] += 1
+
+    by_category = [
+        {"category": key, "label": cat_labels.get(key, key), "count": cnt}
+        for key, cnt in sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    by_teacher = sorted(teacher_map.values(), key=lambda t: t["count"], reverse=True)
+
+    return Response({
+        "total": total,
+        "by_category": by_category,
+        "by_teacher": by_teacher,
+        "years": sorted(years, reverse=True),
+    })

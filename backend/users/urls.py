@@ -14,11 +14,14 @@ from .views import (
     my_department,
     hod_results,
     hod_attendance,
+    hod_class_performance,
     hod_tutor_overview,
     hod_tutor_grid,
     hod_assign_tutor,
     hod_remove_tutor,
     my_class,
+    tutor_student_report,
+    my_class_marksheet,
     od_create,
     od_my_requests,
     od_cancel,
@@ -26,6 +29,11 @@ from .views import (
     tutor_od_action,
     hod_od_pending,
     hod_od_action,
+    participation_create,
+    participation_my,
+    participation_delete,
+    iqac_participation_list,
+    iqac_participation_summary,
 )
 
 router = DefaultRouter()
@@ -44,6 +52,7 @@ urlpatterns = [
     path('my-department/', my_department),
     path('hod-results/', hod_results),
     path('hod-attendance/', hod_attendance),
+    path('hod-class-performance/', hod_class_performance),
 
     # ================= HOD TUTOR =================
     path('hod-tutor-overview/', hod_tutor_overview),
@@ -52,6 +61,8 @@ urlpatterns = [
     path('hod-remove-tutor/<int:tutor_id>/', hod_remove_tutor),
 
     path('my-class/', my_class),
+    path('my-class/student/<int:student_id>/report/', tutor_student_report),
+    path('my-class/marksheet/', my_class_marksheet),
 
     # ================= ON DUTY =================
     path('od/', od_my_requests),
@@ -61,6 +72,13 @@ urlpatterns = [
     path('tutor/od/<int:pk>/action/', tutor_od_action),
     path('hod/od/', hod_od_pending),
     path('hod/od/<int:pk>/action/', hod_od_action),
+
+    # ================= FACULTY PARTICIPATION (IQAC) =================
+    path('participation/', participation_my),
+    path('participation/add/', participation_create),
+    path('participation/<int:pk>/delete/', participation_delete),
+    path('iqac/participation/', iqac_participation_list),
+    path('iqac/participation/summary/', iqac_participation_summary),
 ]
 
 urlpatterns += router.urls

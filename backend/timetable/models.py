@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 
 
 # =====================================================
@@ -143,3 +144,78 @@ class Holiday(models.Model):
  
     def __str__(self):
         return f"{self.date} - {self.name}"
+
+
+# =====================================================
+#  TIMETABLE APPROVAL  — one row per class (year + semester)
+#  Tracks the HOD-submit -> admin-approve workflow.
+#
+#  status:
+#    draft      -> HOD is still building (default)
+#    submitted  -> HOD sent it to the admin for review (locked from editing)
+#    approved   -> admin approved; ONLY approved classes are shown to
+#                  students / teachers in their timetable view
+#    rejected   -> admin sent it back with a remark; HOD can edit + resubmit
+#
+#  A class is identified by (year, semester). The course is stored too,
+#  for display on the admin's approvals list.
+# =====================================================
+class TimetableApproval(models.Model):
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        SUBMITTED = "submitted", "Submitted"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+
+    course = models.ForeignKey(
+        'courses.Course',
+        on_delete=models.CASCADE,
+        related_name="timetable_approvals",
+        null=True, blank=True,
+    )
+    year = models.ForeignKey(
+        'courses.Year',
+        on_delete=models.CASCADE,
+        related_name="timetable_approvals",
+    )
+    semester = models.PositiveSmallIntegerField()
+
+    status = models.CharField(
+        max_length=12,
+        choices=Status.choices,
+        default=Status.DRAFT,
+    )
+
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="timetable_submissions",
+    )
+    submitted_at = models.DateTimeField(null=True, blank=True)
+
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="timetable_reviews",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    remark = models.TextField(blank=True)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-submitted_at", "-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["year", "semester"],
+                name="unique_timetable_approval_per_class",
+            )
+        ]
+
+    def __str__(self):
+        yn = self.year.year_number if self.year else "?"
+        return f"Year {yn} · Sem {self.semester} — {self.status}"

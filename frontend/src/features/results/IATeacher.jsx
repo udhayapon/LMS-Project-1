@@ -110,7 +110,7 @@ export default function IATeacher({ embedded = false }) {
       };
     });
     try {
-      await API.post("/internal-assessments/save_marks/", {
+      await API.post("/ia-marks/save_marks/", {
         teaching_assignment: selectedTA,
         number: iaNumber,
         max_marks: maxMarks,

@@ -11,6 +11,7 @@ const ADMIN_TYPES = [
   { value: "accounts_admin", label: "Accounts Admin (Fees)" },
   { value: "exam_admin", label: "Examination Admin (Exams & Results)" },
   { value: "academic_admin", label: "Academic Admin (Courses & Subjects)" },
+  { value: "iqac_admin", label: "IQAC Admin (Faculty Participation)" },
 ];
 
 const ROLE_LABEL = {
@@ -18,6 +19,7 @@ const ROLE_LABEL = {
   accounts_admin: "Accounts Admin",
   exam_admin: "Examination Admin",
   academic_admin: "Academic Admin",
+  iqac_admin: "IQAC Admin",
 };
 
 export default function AdminUsers() {
@@ -120,7 +122,7 @@ export default function AdminUsers() {
     }
   };
 
-  const adminRoles = ["admin", "accounts_admin", "exam_admin", "academic_admin"];
+  const adminRoles = ["admin", "accounts_admin", "exam_admin", "academic_admin", "iqac_admin"];
   const admins = users.filter((u) => adminRoles.includes(u.role));
 
   return (
