@@ -27,6 +27,9 @@ export default function StudentCourses() {
     }
   };
 
+  // the student's course id (all enrolled subjects share the same course)
+  const courseId = courses[0]?.course_id;
+
   return (
     <div className="app">
       <Navbar setOpen={setOpen} />
@@ -42,11 +45,22 @@ export default function StudentCourses() {
                   <h1 className="courses-title">My Subjects</h1>
                   <p className="courses-subtitle">View your enrolled subjects</p>
                 </div>
-                {!loading && (
-                  <span className="courses-count">
-                    {courses.length} subject{courses.length !== 1 ? "s" : ""}
-                  </span>
-                )}
+
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  {!loading && courseId && (
+                    <button
+                      className="courses-open-btn"
+                      onClick={() => navigate(`/courses/${courseId}/structure`)}
+                    >
+                      Course Structure
+                    </button>
+                  )}
+                  {!loading && (
+                    <span className="courses-count">
+                      {courses.length} subject{courses.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* ── Loading ── */}

@@ -24,7 +24,7 @@ urlpatterns = [
 
     path("api/", include("exams.urls")),
     path("api/", include("events.urls")),
-
+    path("api/", include("teachingplan.urls"))
 ]
 
 # ================= MEDIA FILES =================

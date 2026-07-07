@@ -34,6 +34,7 @@ from .views import (
     participation_delete,
     iqac_participation_list,
     iqac_participation_summary,
+    iqac_academic_quality,
 )
 
 router = DefaultRouter()
@@ -79,6 +80,9 @@ urlpatterns = [
     path('participation/<int:pk>/delete/', participation_delete),
     path('iqac/participation/', iqac_participation_list),
     path('iqac/participation/summary/', iqac_participation_summary),
+
+    # ================= IQAC ACADEMIC QUALITY =================
+    path('iqac/academic-quality/', iqac_academic_quality),
 ]
 
 urlpatterns += router.urls

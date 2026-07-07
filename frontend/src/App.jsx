@@ -9,6 +9,7 @@ import Notifications from "./pages/Notifications";
 // ===== COMMON FEATURES =====
 import Courses from "./features/courses/Courses";
 import CourseDetails from "./features/courses/CourseDetails";
+import CourseStructure from "./features/courses/CourseStructure";
 import Years from "./features/years/Years";
 import Subjects from "./features/subjects/Subjects";
 import TeachingAssignments from "./features/teaching/TeachingAssignments";
@@ -27,6 +28,7 @@ import Announcements from "./features/announcements/Announcements";
  
 // ===== ADMIN =====
 import Dashboard from "./pages/Admin/Dashboard";
+import UserManagement from "./pages/Admin/UserManagement";
 import Students from "./pages/Admin/Students";
 import Teachers from "./pages/Admin/Teachers";
 import AdminUsers from "./pages/Admin/AdminUsers";
@@ -48,6 +50,7 @@ import StudentHome from "./pages/Student/StudentHome";
 import StudentCourses from "./pages/Student/StudentCourses";
 import StudentSubjectDetails from "./pages/Student/StudentSubjectDetails";
 import StudentGrades from "./pages/Student/StudentGrades";
+import StudentTeachingPlan from "./features/teachingplan/StudentTeachingPlan";
 
 // ===== PARENT =====
 import ParentDashboard from "./pages/Parent/ParentDashboard";
@@ -60,10 +63,14 @@ import ParentMessage from "./pages/Parent/ParentMessage";
 
 import HODDepartment from "./features/hod/HODDepartment";
 import MyClass from "./features/tutor/MyClass";
+import TeacherTeachingPlan from "./features/teachingplan/TeacherTeachingPlan";
+import HODTeachingPlan from "./features/teachingplan/HODTeachingPlan";
+
 
 // ===== IQAC =====
 import FacultyContributions from "./features/iqac/FacultyContributions";
 import IqacDashboard from "./features/iqac/IqacDashboard";
+import AcademicQuality from "./features/iqac/AcademicQuality";
 
 // ================= USER HELPER =================
 const getUser = () => {
@@ -89,19 +96,36 @@ function ProtectedRoute({ children, role, roles, adminOnly = false }) {
     return (<Navigate to="/" replace />);
 
   const userRole = user.role?.toLowerCase();
+  const subRole = user.sub_role?.toLowerCase();
+
+  // the "main" admin = superuser, or an admin with no sub_role
+  const isMainAdmin =
+    user.is_superuser === true ||
+    (userRole === "admin" && !subRole);
+
+  // does the user satisfy a single required role string?
+  //  - "admin"                    -> only the main admin
+  //  - teacher / student / parent -> match the main role
+  //  - anything else (exam_admin, iqac_admin, ...) -> match the sub_role
+  const matches = (r) => {
+    r = (r || "").toLowerCase();
+    if (r === "admin") return isMainAdmin;
+    if (["teacher", "student", "parent"].includes(r)) return userRole === r;
+    return subRole === r;
+  };
 
   // admin-only routes
-  if (adminOnly && userRole !== "admin") {
+  if (adminOnly && !isMainAdmin) {
     return (<Navigate to="/" replace />);
   }
 
   // single allowed role
-  if (role && userRole !== role.toLowerCase()) {
+  if (role && !matches(role)) {
     return (<Navigate to="/" replace />);
   }
 
   // multiple allowed roles
-  if (roles && !roles.map((r) => r.toLowerCase()).includes(userRole)) {
+  if (roles && !roles.some(matches)) {
     return (<Navigate to="/" replace />);
   }
 
@@ -114,37 +138,39 @@ function RoleRedirect() {
 
   const user = getUser();
 
-  if (!user) 
+  if (!user)
     return (<Navigate to="/" replace />);
 
-  const role =
-    user.role?.toLowerCase();
+  const role = user.role?.toLowerCase();
+  const subRole = user.sub_role?.toLowerCase();
 
-  if (role === "admin")
-    return (<Navigate to="/dashboard" replace/>);
+  // superuser -> main dashboard
+  if (user.is_superuser === true)
+    return (<Navigate to="/dashboard" replace />);
 
-  if (role === "accounts_admin")
-    return (<Navigate to="/admin/fees" replace/>);
-
-  if (role === "exam_admin")
-    return (<Navigate to="/results" replace/>);
-
-  if (role === "academic_admin")
-    return (<Navigate to="/courses" replace/>);
-
-  if (role === "iqac_admin")
-    return (<Navigate to="/iqac" replace/>);
+  // admins: decide by sub_role
+  if (role === "admin") {
+    if (subRole === "accounts_admin")
+      return (<Navigate to="/admin/fees" replace />);
+    if (subRole === "exam_admin")
+      return (<Navigate to="/results" replace />);
+    if (subRole === "academic_admin")
+      return (<Navigate to="/courses" replace />);
+    if (subRole === "iqac_admin")
+      return (<Navigate to="/iqac" replace />);
+    return (<Navigate to="/dashboard" replace />);   // plain admin
+  }
 
   if (role === "teacher")
-    return (<Navigate to="/teacher" replace/>);
+    return (<Navigate to="/teacher" replace />);
 
   if (role === "student")
-    return (<Navigate to="/student" replace/>);
+    return (<Navigate to="/student" replace />);
 
   if (role === "parent")
-  return (<Navigate to="/parent" replace />);
+    return (<Navigate to="/parent" replace />);
 
-  return (<Navigate to="/" replace /> );
+  return (<Navigate to="/" replace />);
 }
 
 
@@ -167,11 +193,12 @@ function App() {
 
         <Route path="/courses" element={  <ProtectedRoute> <Courses /> </ProtectedRoute> }/>
         <Route path="/courses/:id" element={ <ProtectedRoute> <CourseDetails /> </ProtectedRoute> }/>
+        <Route path="/courses/:id/structure" element={ <ProtectedRoute> <CourseStructure /> </ProtectedRoute> }/>
 
         {/* ================= ADMIN ================= */}
 
         <Route path="/dashboard" element={ <ProtectedRoute adminOnly={true}> <Dashboard /></ProtectedRoute> }/>
-
+        <Route path="/users" element={ <ProtectedRoute adminOnly={true}> <UserManagement /> </ProtectedRoute> } />
         {/* ================= STUDENTS ================= */}
         <Route path="/students" element={ <ProtectedRoute adminOnly={true}> <Students /> </ProtectedRoute>} />
 
@@ -225,6 +252,11 @@ function App() {
         <Route path="/teacher/subject/:id" element={ <ProtectedRoute role="teacher"><SubjectDetails /></ProtectedRoute>}/>
         <Route path="/teacher-progress" element={ <ProtectedRoute role="teacher"> <TeacherProgress /></ProtectedRoute>}/>
         <Route path="/teacher/messages" element={ <ProtectedRoute role="teacher"> <TeacherChat /> </ProtectedRoute> }/>
+
+        {/* ================= TEACHING PLANS ================= */}
+        <Route path="/teacher/teaching-plan" element={ <ProtectedRoute role="teacher"> <TeacherTeachingPlan /> </ProtectedRoute> }/>
+        <Route path="/my-department/teaching-plans" element={ <ProtectedRoute role="teacher"> <HODTeachingPlan /> </ProtectedRoute> }/>
+        <Route path="/student/teaching-plan" element={ <ProtectedRoute role="student"> <StudentTeachingPlan /> </ProtectedRoute> }/>
 
         {/* ================= MY CONTRIBUTIONS (IQAC) ================= */}
         <Route path="/my-contributions" element={ <ProtectedRoute role="teacher"> <FacultyContributions /> </ProtectedRoute> }/>
@@ -317,6 +349,7 @@ function App() {
 
         {/* ================= IQAC DASHBOARD ================= */}
         <Route path="/iqac" element={<ProtectedRoute role="iqac_admin"> <IqacDashboard /> </ProtectedRoute>} />
+        <Route path="/iqac/academic-quality" element={<ProtectedRoute role="iqac_admin"> <AcademicQuality /> </ProtectedRoute>} />
 
         {/* ===== FALLBACK ===== */}
         <Route path="*" element={ <Navigate to="/" replace/>}/>

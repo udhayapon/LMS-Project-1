@@ -29,15 +29,7 @@ class SubjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subject
 
-        fields = [
-            'id',
-            'name',
-            'year',
-            'year_number',
-            'course_name',
-            'semester'
-        ]
-
+        fields = ['id', 'name', 'code', 'credits', 'year', 'semester', 'year_number', 'course_name']
 
 # ===================== YEAR =====================
 class YearSerializer(serializers.ModelSerializer):
@@ -116,6 +108,7 @@ class TeachingAssignmentSerializer(serializers.ModelSerializer):
 
 
 # ===================== ENROLLMENT =====================
+# ===================== ENROLLMENT =====================
 class EnrollmentSerializer(serializers.ModelSerializer):
 
     student_name = serializers.CharField(
@@ -130,6 +123,11 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 
     teacher_name = serializers.CharField(
         source='teaching_assignment.teacher.username',
+        read_only=True
+    )
+
+    course_id = serializers.IntegerField(
+        source='teaching_assignment.course.id',
         read_only=True
     )
 
@@ -171,6 +169,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 
             # DETAILS
             'teacher_name',
+            'course_id',
             'course_name',
             'subject_name',
             'year_number',
@@ -179,8 +178,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
             # DATE
             'enrolled_at',
         ]
-
-
+        
 # ===================== LECTURE =====================
 class LectureSerializer(serializers.ModelSerializer):
 
@@ -635,3 +633,4 @@ class ConversationMessageSerializer(serializers.ModelSerializer):
                   'receiver_name', 'text', 'is_read', 'created_at']
         read_only_fields = ['sender', 'created_at']
         
+

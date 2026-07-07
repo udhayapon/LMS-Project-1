@@ -1881,3 +1881,4 @@ def update_parent_children(request, profile_id):
         profile.children.set(User.objects.filter(id__in=child_ids, role='student'))
 
     return Response({'message': 'Parent updated.'})
+

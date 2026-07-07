@@ -23,6 +23,7 @@ SEMESTER_CHOICES = (
     (8, "Semester 8"),
 )
 
+
 # ================= DEPARTMENT =================
 class Department(models.Model):
 
@@ -50,22 +51,47 @@ class Department(models.Model):
 # ================= USER =================
 class User(AbstractUser):
 
+    # ================= MAIN ROLE =================
+    # Top-level category only. The specific level lives in sub_role.
     ROLE_CHOICES = (
         ('student', 'Student'),
         ('teacher', 'Teacher'),
         ('admin', 'Admin'),
+        ('non_teaching', 'Non-teaching staff'),
         ('parent', 'Parent'),
-        ('accounts_admin', 'Accounts Admin'),
-        ('exam_admin', 'Examination Admin'),
-        ('academic_admin', 'Academic Admin'),
-        ('iqac_admin', 'IQAC Admin'),
     )
 
-    # ================= ROLE =================
+    # ================= SUB ROLE =================
+    # Blank for students and parents.
+    SUB_ROLE_CHOICES = (
+        # teacher
+        ('assistant_professor', 'Assistant Professor'),
+        ('associate_professor', 'Associate Professor'),
+        ('professor', 'Professor'),
+        # admin
+        ('academic_admin', 'Academic Admin'),
+        ('exam_admin', 'Examination Admin'),
+        ('accounts_admin', 'Accounts Admin'),
+        ('iqac_admin', 'IQAC Admin'),
+        ('super_admin', 'Super Admin'),
+        # non-teaching
+        ('office_assistant', 'Office Assistant'),
+        ('lab_technician', 'Lab Technician'),
+        ('librarian', 'Librarian'),
+        ('clerk', 'Clerk'),
+    )
+
     role = models.CharField(
-        max_length=30,
+        max_length=20,
         choices=ROLE_CHOICES,
         default='student'
+    )
+
+    sub_role = models.CharField(
+        max_length=40,
+        choices=SUB_ROLE_CHOICES,
+        blank=True,
+        null=True
     )
 
     # ================= DEPARTMENT =================
@@ -92,7 +118,7 @@ class User(AbstractUser):
         unique=True
     )
 
-    # ================= TEACHER EMPLOYEE ID =================
+    # ================= STAFF EMPLOYEE ID =================
     employee_id = models.CharField(
         max_length=20,
         blank=True,
@@ -113,11 +139,20 @@ class User(AbstractUser):
         null=True,
         blank=True
     )
+
     # ================= STUDENT BATCH / ADMISSION YEAR =================
     batch_year = models.IntegerField(
         null=True,
         blank=True
     )
+
+    # ================= EMPLOYEE ID PREFIXES (Option A) =================
+    EMP_PREFIXES = {
+        'teacher': 'TCH',
+        'admin': 'ADM',
+        'non_teaching': 'STF',
+    }
+
     # ================= SAVE =================
     def save(self, *args, **kwargs):
 
@@ -173,30 +208,95 @@ class User(AbstractUser):
             # ================= FINAL ROLL NUMBER =================
             self.roll_number = f"{year_prefix}{dept_code}{new_number:03d}"
 
-        # ================= TEACHER EMPLOYEE ID =================
-        if (
-            self.role == "teacher"
-            and not self.employee_id
-        ):
+        # ================= STAFF EMPLOYEE ID (TCH / ADM / STF) =================
+        prefix = self.EMP_PREFIXES.get(self.role)
+        if prefix and not self.employee_id:
 
-            last_teacher = User.objects.filter(
-                role="teacher"
+            # count only within the same prefix so the series don't collide
+            last_staff = User.objects.filter(
+                role=self.role,
+                employee_id__startswith=prefix,
             ).order_by('-employee_id').first()
 
             new_number = 1
-            if last_teacher and last_teacher.employee_id:
+            if last_staff and last_staff.employee_id:
                 try:
-                    new_number = int(last_teacher.employee_id[-3:]) + 1
+                    new_number = int(last_staff.employee_id[-3:]) + 1
                 except (ValueError, TypeError):
                     pass
 
-            self.employee_id = f"TCH{new_number:03d}"
+            self.employee_id = f"{prefix}{new_number:03d}"
 
         super().save(*args, **kwargs)
 
     # ================= STRING =================
     def __str__(self):
         return self.username
+
+
+# ================= STUDENT PROFILE =================
+class StudentProfile(models.Model):
+
+    user = models.OneToOneField(
+        'users.User',
+        on_delete=models.CASCADE,
+        related_name='student_profile',
+        limit_choices_to={'role': 'student'},
+    )
+
+    # personal
+    gender = models.CharField(max_length=10, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    blood_group = models.CharField(max_length=5, blank=True)
+    photo = models.ImageField(upload_to='student_photos/', null=True, blank=True)
+
+    # address
+    address_line1 = models.CharField(max_length=255, blank=True)
+    address_line2 = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    district = models.CharField(max_length=100, blank=True)
+    state = models.CharField(max_length=100, blank=True)
+    pincode = models.CharField(max_length=10, blank=True)
+
+    # admission
+    admission_date = models.DateField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Profile of {self.user.username}"
+
+
+# ================= FACULTY / STAFF PROFILE =================
+# Used for both teachers AND non-teaching staff (both are employees).
+class FacultyProfile(models.Model):
+
+    user = models.OneToOneField(
+        'users.User',
+        on_delete=models.CASCADE,
+        related_name='faculty_profile',
+    )
+
+    # personal
+    gender = models.CharField(max_length=10, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    blood_group = models.CharField(max_length=5, blank=True)
+    photo = models.ImageField(upload_to='staff_photos/', null=True, blank=True)
+
+    # address
+    address_line1 = models.CharField(max_length=255, blank=True)
+    address_line2 = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    district = models.CharField(max_length=100, blank=True)
+    state = models.CharField(max_length=100, blank=True)
+    pincode = models.CharField(max_length=10, blank=True)
+
+    # employment
+    qualification = models.CharField(max_length=255, blank=True)     # M.E., Ph.D.
+    specialization = models.CharField(max_length=255, blank=True)    # for teachers
+    date_of_joining = models.DateField(null=True, blank=True)
+    experience_years = models.PositiveIntegerField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Profile of {self.user.username}"
 
 
 # ================= PARENT PROFILE =================
@@ -215,6 +315,11 @@ class ParentProfile(models.Model):
         limit_choices_to={'role': 'student'},
         blank=True,
     )
+
+    # contact details (useful when a parent is auto-created from a student)
+    phone = models.CharField(max_length=15, blank=True)
+    occupation = models.CharField(max_length=100, blank=True)
+    relation = models.CharField(max_length=20, blank=True)   # Father / Mother / Guardian
 
     def __str__(self):
         return self.user.username

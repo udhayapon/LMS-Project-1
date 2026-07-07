@@ -28,20 +28,17 @@ export default function Sidebar({ open, setOpen }) {
 
   let menu = [];
 
+  const subRole = user.sub_role;
+  // the "main" admin = superuser, or an admin with no sub_role
+  const isMainAdmin =
+    user.is_superuser === true || (user.role === "admin" && !subRole);
+
   // ================= FULL ADMIN (SUPER ADMIN) =================
-  if (user.role === "admin") {
+  if (isMainAdmin) {
     menu = [
       { name: "Dashboard", path: "/dashboard" },
       { name: "Departments", path: "/departments" },
-      {
-        name: "Users",
-        children: [
-          { name: "Students", path: "/students" },
-          { name: "Teachers", path: "/teachers" },
-          { name: "Admins", path: "/admins" },
-          { name: "Parents", path: "/parents-admin" },
-        ],
-      },
+      { name: "User Management", path: "/users" },
       { name: "Courses", path: "/courses" },
       { name: "Faculty Allocation", path: "/teaching-assignments" },
       { name: "Enrollments", path: "/enrollments" },
@@ -55,7 +52,7 @@ export default function Sidebar({ open, setOpen }) {
   }
 
   // ================= ACCOUNTS ADMIN =================
-  else if (user.role === "accounts_admin") {
+  else if (user.role === "admin" && subRole === "accounts_admin") {
     menu = [
       { name: "Fee Management", path: "/admin/fees" },
       { name: "Announcements", path: "/announcements" },
@@ -64,16 +61,16 @@ export default function Sidebar({ open, setOpen }) {
   }
 
   // ================= EXAMINATION ADMIN =================
-  else if (user.role === "exam_admin") {
+  else if (user.role === "admin" && subRole === "exam_admin") {
     menu = [
       { name: "Results", path: "/results" },
-       { name: "Announcements", path: "/announcements" },
+      { name: "Announcements", path: "/announcements" },
       { name: "Profile", path: "/profile" },
     ];
   }
 
   // ================= ACADEMIC ADMIN =================
-  else if (user.role === "academic_admin") {
+  else if (user.role === "admin" && subRole === "academic_admin") {
     menu = [
       { name: "Departments", path: "/departments" },
       { name: "Courses", path: "/courses" },
@@ -84,9 +81,10 @@ export default function Sidebar({ open, setOpen }) {
   }
 
   // ================= IQAC ADMIN =================
-  else if (user.role === "iqac_admin") {
+  else if (user.role === "admin" && subRole === "iqac_admin") {
     menu = [
       { name: "Faculty Participation", path: "/iqac" },
+      { name: "Academic Quality", path: "/iqac/academic-quality" },
       { name: "Profile", path: "/profile" },
     ];
   }
@@ -95,10 +93,14 @@ export default function Sidebar({ open, setOpen }) {
   else if (user.role === "teacher") {
     menu = [
       { name: "Dashboard", path: "/teacher" },
-      ...(isHod ? [{ name: "My Department", path: "/my-department" }] : []),
+      ...(isHod ? [
+        { name: "My Department", path: "/my-department" },
+        { name: "Plan Approvals", path: "/my-department/teaching-plans" },
+      ] : []),
       ...(isTutor ? [{ name: "My Class", path: "/my-class" }] : []),
       { name: "My Subjects", path: "/courses" },
       { name: "Timetable", path: "/timetable" },
+      { name: "My Teaching Plan", path: "/teacher/teaching-plan" },
       { name: "Attendance", path: "/teacher/attendance" },
       { name: "Calendar", path: "/calendar" },
       { name: "Results", path: "/results" },
@@ -115,6 +117,7 @@ export default function Sidebar({ open, setOpen }) {
       { name: "Dashboard", path: "/student" },
       { name: "My Subjects", path: "/student/courses" },
       { name: "Timetable", path: "/timetable" },
+      { name: "Teaching Plan", path: "/student/teaching-plan" },
       { name: "Attendance", path: "/student/attendance" },
       { name: "Grades", path: "/student/grades" },
       { name: "Results", path: "/results" },
@@ -139,8 +142,26 @@ export default function Sidebar({ open, setOpen }) {
     ];
   }
 
-  // exact-match active check
-  const isActive = (path) => location.pathname === path;
+  // active check — keeps the "Courses" / "My Subjects" item highlighted while
+  // on a course detail or course structure page (/courses/:id and /courses/:id/structure)
+  const isActive = (itemPath) => {
+
+    if (location.pathname === itemPath) {
+      return true;
+    }
+
+    if (location.pathname.startsWith("/courses/")) {
+
+      if (
+        itemPath === "/courses" ||
+        itemPath === "/student/courses"
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  };
 
   return (
     <>

@@ -76,6 +76,13 @@ class Subject(models.Model):
         default=1
     )
 
+    # ================= CREDITS =================
+    # whole-number credits for this subject (e.g. 3, 4).
+    # defaults to 0 so existing rows stay valid until set.
+    credits = models.IntegerField(
+        default=0
+    )
+
     class Meta:
 
         # Alphabetical ordering

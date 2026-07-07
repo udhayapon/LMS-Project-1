@@ -845,3 +845,127 @@
 
 .tp-pending-table tbody tr:last-child td { border-bottom: none; }
 .tp-pending-table tbody tr:hover td { background: #f8fafc; }
+
+/* =============================================
+   TEACHER PROGRESS TABLE — FIT + ALIGNED HEADERS (v-final)
+   Every rule below is scoped under .tp-table-card so it OUTRANKS the
+   global "th, td { padding:14px; text-align:left }" rules in App.css,
+   which were overriding the colgroup padding and shifting the columns.
+   A <colgroup> in TeacherProgress.jsx pins each column width and
+   table-layout: fixed makes the browser honour those widths for BOTH
+   the header row and the body — so every header sits directly above
+   its own data with no drift.
+   ============================================= */
+.tp-table-card { max-width: 100%; overflow: hidden; }
+
+.tp-table-card .tp-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.tp-table-card .tp-table {
+  width: 100%;
+  min-width: 820px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+/* scoped padding — beats App.css "th, td { padding: 14px }" */
+.tp-table-card .tp-table th,
+.tp-table-card .tp-table td {
+  padding: 12px 14px !important;
+  text-align: center;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+/* header cells */
+.tp-table-card .tp-table th {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #64748b;
+  white-space: nowrap;
+  background: #f8fafc;
+  text-align: center;
+}
+
+/* metric bar + % fill the column from the left, under their header */
+.tp-table-card .tp-td-metric { overflow: visible; }
+
+/* overall + pending pills anchor left under their headers, not clipped */
+.tp-table-card .tp-td-overall,
+.tp-table-card .tp-td-pending { overflow: visible; }
+
+/* name truncates instead of forcing the column wider */
+.tp-table-card .tp-td-name { overflow: hidden; }
+.tp-table-card .tp-student-name {
+  overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; display: block;
+}
+
+/* the toggle (last) column stays narrow and centred */
+.tp-table-card .tp-td-toggle { text-align: center; }
+
+/* keep the # and Student columns left-aligned (names read better left);
+   everything else (metrics, pills) is centred under its header */
+.tp-table-card .tp-table th:nth-child(1),
+.tp-table-card .tp-table td:nth-child(1),
+.tp-table-card .tp-table th:nth-child(2),
+.tp-table-card .tp-table td:nth-child(2) { text-align: left; }
+
+/* metric cells: centre the bar + % as a block under the header */
+.tp-table-card .tp-td-metric { text-align: center; }
+.tp-table-card .tp-td-metric .prg-bar-track { width: 100%; margin: 0 auto; }
+.tp-table-card .tp-td-metric .tp-pct { text-align: center; }
+
+/* pills centre under Overall / Pending headers */
+.tp-table-card .tp-td-overall,
+.tp-table-card .tp-td-pending { text-align: center; }
+
+
+/* metric columns: centre the whole bar+% block */
+.tp-table-card .tp-table td.tp-td-metric { text-align: center !important; }
+.tp-table-card .tp-table td.tp-td-metric .tp-pct { text-align: center !important; }
+.tp-table-card .tp-table td.tp-td-metric .prg-bar-track {
+  width: 100% !important;        /* fill the cell first… */
+  max-width: 90px;               /* …then cap so it stays inside the 13% cols */
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* overall + pending pill columns: centre the pill */
+.tp-table-card .tp-table td.tp-td-overall,
+.tp-table-card .tp-table td.tp-td-pending { text-align: center !important; }
+
+/* headers already centre; force it so they always match the data */
+.tp-table-card .tp-table th:nth-child(3),
+.tp-table-card .tp-table th:nth-child(4),
+.tp-table-card .tp-table th:nth-child(5),
+.tp-table-card .tp-table th:nth-child(6),
+.tp-table-card .tp-table th:nth-child(7) { text-align: center !important; }
+
+.tp-table-card .tp-table {
+  display: table !important;
+  table-layout: fixed !important;
+  width: 100% !important;
+}
+
+.tp-table-card .tp-table thead {
+  display: table-header-group !important;
+}
+
+.tp-table-card .tp-table tbody {
+  display: table-row-group !important;
+}
+
+.tp-table-card .tp-table tr {
+  display: table-row !important;
+}
+
+.tp-table-card .tp-table th,
+.tp-table-card .tp-table td {
+  display: table-cell !important;
+}

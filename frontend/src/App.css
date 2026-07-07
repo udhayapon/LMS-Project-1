@@ -15,6 +15,26 @@ body {
   color: #1d365e;
 }
 
+
+/* ================= ADD SUBJECT — SINGLE ROW ================= */
+.form-grid.form-grid--row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-grid.form-grid--row > select,
+.form-grid.form-grid--row > input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.form-grid.form-grid--row > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 /* ================= APP LAYOUT ================= */
 .app {
   display: flex;
@@ -303,6 +323,7 @@ tr:hover {
   gap: 15px;
   margin-bottom: 15px;
 }
+
 
 /* ================= TABS ================= */
 .tabs {

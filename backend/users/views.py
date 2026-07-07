@@ -208,6 +208,9 @@ def login_view(request):
 
             "role":
                 role,
+            
+             "sub_role":
+                user.sub_role,
 
             # DEPARTMENT
             "department":
@@ -1162,20 +1165,7 @@ def hod_od_action(request, pk):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def hod_class_performance(request):
-    """
-    Per-year (class) performance for the HOD's department(s).
 
-    For each year (1..4) inside the department:
-      - student_count
-      - pass_percent   (students whose every published result entry passed)
-      - attendance_percent
-      - arrears        (students with at least one fail)
-      - tutor_name     (YearTutor for that year, across the dept's courses)
-      - subjects[]     (per-subject pass_rate + fail count)
-
-    Same calculation as my_department / hod_results, grouped by student.year
-    instead of rolled up for the whole department.
-    """
     user = request.user
 
     departments = Department.objects.filter(hod=user)
@@ -1471,19 +1461,17 @@ def my_class_marksheet(request):
 
     return Response({"is_tutor": True, "classes": classes})
 
+
 # =====================================================
 #  FACULTY PARTICIPATION (IQAC)
-#  Paste these functions at the END of users/views.py.
-#  Top-level functions, local imports — no change to existing imports.
-#
-#  Then register the routes in users/urls.py (shown after this file),
-#  and add the names to the `from .views import (...)` list.
 # =====================================================
 
 # ---------- helper: who is the IQAC admin ----------
 def _is_iqac(user):
-    return getattr(user, "role", "") == "iqac_admin" or user.is_superuser
-
+    return (
+        user.is_superuser
+        or getattr(user, "sub_role", "") == "iqac_admin"
+    )
 
 # ---------- TEACHER: add an activity (with proof upload) ----------
 @api_view(["POST"])
@@ -1572,6 +1560,7 @@ def iqac_participation_summary(request):
     Totals for the IQAC dashboard:
       - overall total activities
       - per-category counts
+      - per-department counts   (NEW)
       - per-teacher counts (with department)
     Optional ?year=<2025-26> to scope to one academic year.
     """
@@ -1591,6 +1580,8 @@ def iqac_participation_summary(request):
 
     # ----- per-category counts -----
     category_counts = {}
+    # ----- per-department counts -----
+    department_counts = {}
     # ----- per-teacher counts -----
     teacher_map = {}
     # ----- list of academic years present (for a dropdown) -----
@@ -1600,18 +1591,29 @@ def iqac_participation_summary(request):
     for p in qs:
         total += 1
 
+        # category
         category_counts[p.category] = category_counts.get(p.category, 0) + 1
 
+        # academic year list
         if p.academic_year:
             years.add(p.academic_year)
 
+        # department (from the teacher)
+        dept_name = (
+            p.faculty.department.name
+            if (p.faculty and p.faculty.department)
+            else "No Department"
+        )
+        department_counts[dept_name] = department_counts.get(dept_name, 0) + 1
+
+        # teacher
         tid = p.faculty_id
         if tid not in teacher_map:
             teacher_map[tid] = {
                 "id": tid,
                 "name": p.faculty.username if p.faculty else "—",
                 "employee_id": p.faculty.employee_id if p.faculty else "",
-                "department": p.faculty.department.name if (p.faculty and p.faculty.department) else "—",
+                "department": dept_name,
                 "count": 0,
             }
         teacher_map[tid]["count"] += 1
@@ -1621,11 +1623,157 @@ def iqac_participation_summary(request):
         for key, cnt in sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
     ]
 
+    by_department = [
+        {"department": name, "count": cnt}
+        for name, cnt in sorted(department_counts.items(), key=lambda x: x[1], reverse=True)
+    ]
+
     by_teacher = sorted(teacher_map.values(), key=lambda t: t["count"], reverse=True)
 
     return Response({
         "total": total,
         "by_category": by_category,
+        "by_department": by_department,
         "by_teacher": by_teacher,
         "years": sorted(years, reverse=True),
+    })
+
+# =====================================================
+#  IQAC: ACADEMIC QUALITY OVERVIEW
+# =====================================================
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def iqac_academic_quality(request):
+  
+    from attendance.models import Attendance
+    from exams.models import SemesterResult
+
+    if not _is_iqac(request.user):
+        return Response({"detail": "Only the IQAC admin can view this."}, status=403)
+
+    PRESENT_STATUSES = ["present", "duty_leave"]
+
+    year_filter = request.query_params.get("year")
+    try:
+        year_filter = int(year_filter) if year_filter else None
+    except (TypeError, ValueError):
+        year_filter = None
+
+    departments = Department.objects.all().order_by("name")
+
+    # college-wide running totals
+    college_students = 0
+    college_evaluated = 0
+    college_passed = 0
+    college_arrears = 0
+
+    dept_blocks = []
+    for dept in departments:
+        students = list(
+            User.objects.filter(role="student", department=dept)
+            .order_by("year", "roll_number")
+        )
+        if year_filter:
+            students = [s for s in students if s.year == year_filter]
+
+        if not students:
+            continue
+
+        # group this department's students by year
+        by_year = {}
+        for s in students:
+            by_year.setdefault(s.year, []).append(s)
+
+        year_rows = []
+        dept_student_total = 0
+        dept_pass_sum = 0        # for weighted dept pass %
+        dept_eval_total = 0
+        dept_arrears = 0
+
+        for yr in sorted(y for y in by_year.keys() if y is not None):
+            yr_students = by_year[yr]
+            student_ids = [s.id for s in yr_students]
+
+            results = (
+                SemesterResult.objects
+                .filter(student_id__in=student_ids, is_published=True)
+                .prefetch_related("entries__subject")
+            )
+
+            passed = 0
+            failed = 0
+            subject_fail = {}
+            for sr in results:
+                entries = list(sr.entries.all())
+                if not entries:
+                    continue
+                if all(e.is_pass for e in entries):
+                    passed += 1
+                else:
+                    failed += 1
+                for e in entries:
+                    if not e.is_pass:
+                        name = e.subject.name if e.subject else "Unknown"
+                        subject_fail[name] = subject_fail.get(name, 0) + 1
+
+            evaluated = passed + failed
+            pass_percent = round((passed / evaluated) * 100, 1) if evaluated else None
+
+            # attendance % for this year-group
+            att = Attendance.objects.filter(student_id__in=student_ids)
+            att_total = att.count()
+            att_present = att.filter(status__in=PRESENT_STATUSES).count()
+            attendance_percent = round((att_present / att_total) * 100, 1) if att_total else None
+
+            weak_subjects = [
+                {"subject": name, "fails": cnt}
+                for name, cnt in sorted(subject_fail.items(), key=lambda x: x[1], reverse=True)
+            ][:3]
+
+            year_rows.append({
+                "year": yr,
+                "student_count": len(yr_students),
+                "evaluated": evaluated,
+                "pass_percent": pass_percent,          # None if no published results
+                "arrears": failed,
+                "attendance_percent": attendance_percent,
+                "weak_subjects": weak_subjects,
+            })
+
+            dept_student_total += len(yr_students)
+            dept_eval_total += evaluated
+            dept_pass_sum += passed
+            dept_arrears += failed
+
+        dept_pass_percent = (
+            round((dept_pass_sum / dept_eval_total) * 100, 1) if dept_eval_total else None
+        )
+
+        dept_blocks.append({
+            "id": dept.id,
+            "name": dept.name,
+            "student_count": dept_student_total,
+            "pass_percent": dept_pass_percent,
+            "arrears": dept_arrears,
+            "years": year_rows,
+        })
+
+        college_students += dept_student_total
+        college_evaluated += dept_eval_total
+        college_passed += dept_pass_sum
+        college_arrears += dept_arrears
+
+    college_pass_percent = (
+        round((college_passed / college_evaluated) * 100, 1) if college_evaluated else None
+    )
+
+    return Response({
+        "college": {
+            "student_count": college_students,
+            "evaluated": college_evaluated,
+            "pass_percent": college_pass_percent,
+            "arrears": college_arrears,
+            "departments": len(dept_blocks),
+        },
+        "departments": dept_blocks,
     })

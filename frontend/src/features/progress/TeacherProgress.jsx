@@ -351,6 +351,22 @@ export default function TeacherProgress() {
 
                   <div className="tp-table-wrap">
                     <table className="tp-table">
+                      {/* colgroup pins every column's width for BOTH header
+                          and body. Widths sum to exactly 100% so table-layout:
+                          fixed has no leftover space to distribute — headers
+                          sit directly above their data with zero drift.
+                          Order: #, Student, Attendance, Assignments, Quiz,
+                          Overall, Pending, toggle. */}
+                      <colgroup>
+                        <col style={{ width: "5%" }} />
+                        <col style={{ width: "33%" }} />
+                        <col style={{ width: "52%" }} />
+                        <col style={{ width: "25%" }} />
+                        <col style={{ width: "25%" }} />
+                        <col style={{ width: "25%" }} />
+                        <col style={{ width: "10%" }} />
+                        <col style={{ width: "5%" }} />
+                      </colgroup>
                       <thead>
                         <tr>
                           <th>#</th>

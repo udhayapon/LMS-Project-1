@@ -11,82 +11,91 @@ function Login() {
   const navigate = useNavigate();
 
   const handleLogin = async () => {
-  setError("");
+    setError("");
 
-  if (!username || !password) {
-    setError("Please enter username and password");
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    const response = await fetch(
-      "http://127.0.0.1:8000/api/users/login/",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ username, password }),
-      }
-    );
-
-    const data = await response.json();
-    console.log("LOGIN RESPONSE:", data);
-
-    if (response.ok) {
-      // ✅ SAVE TOKEN
-      localStorage.setItem("token", data.access);
-      localStorage.setItem("user", JSON.stringify(data));
-
-      const role = (data.role || "").toLowerCase();
-
-      if (data.is_superuser === true || role === "admin") {
-        navigate("/dashboard");   // ADMIN
-      }
-      else if (role === "accounts_admin") {
-        navigate("/admin/fees");  // ACCOUNTS ADMIN
-      }
-      else if (role === "exam_admin") {
-        navigate("/results");     // EXAMINATION ADMIN
-      }
-      else if (role === "academic_admin") {
-        navigate("/courses");     // ACADEMIC ADMIN
-      }
-      else if (role === "iqac_admin") {
-        navigate("/iqac");        // IQAC ADMIN
-      }
-      else if (role === "teacher") {
-        navigate("/teacher");     // TEACHER
-      }
-      else if (role === "student") {
-        navigate("/student");     // STUDENT
-      }
-      else if (role === "parent") {
-        navigate("/parent");      // PARENT
-      }
-      else {
-        console.log("Unknown role:", data);
-        setError("Invalid role");
-      }
-    } else {
-      setError(data.error || "Invalid credentials");
+    if (!username || !password) {
+      setError("Please enter username and password");
+      return;
     }
 
-  } catch (err) {
-    console.log(err);
-    setError("Server error");
-  }
+    setLoading(true);
 
-  setLoading(false);
-};
+    try {
+      const response = await fetch(
+        "http://127.0.0.1:8000/api/users/login/",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ username, password }),
+        }
+      );
+
+      const data = await response.json();
+      console.log("LOGIN RESPONSE:", data);
+
+      if (response.ok) {
+        // ✅ SAVE TOKEN
+        localStorage.setItem("token", data.access);
+        localStorage.setItem("user", JSON.stringify(data));
+
+        const role = (data.role || "").toLowerCase();
+        const subRole = (data.sub_role || "").toLowerCase();
+
+        // superuser -> always the main admin dashboard
+        if (data.is_superuser === true) {
+          navigate("/dashboard");
+        }
+        // admins: decide by sub_role
+        else if (role === "admin") {
+          if (subRole === "accounts_admin") {
+            navigate("/admin/fees");   // ACCOUNTS ADMIN
+          }
+          else if (subRole === "exam_admin") {
+            navigate("/results");      // EXAMINATION ADMIN
+          }
+          else if (subRole === "academic_admin") {
+            navigate("/courses");      // ACADEMIC ADMIN
+          }
+          else if (subRole === "iqac_admin") {
+            navigate("/iqac");         // IQAC ADMIN
+          }
+          else {
+            navigate("/dashboard");    // plain / super admin
+          }
+        }
+        else if (role === "teacher") {
+          navigate("/teacher");        // TEACHER
+        }
+        else if (role === "student") {
+          navigate("/student");        // STUDENT
+        }
+        else if (role === "parent") {
+          navigate("/parent");         // PARENT
+        }
+        else {
+          console.log("Unknown role:", data);
+          setError("Invalid role");
+        }
+      } else {
+        setError(data.error || "Invalid credentials");
+      }
+
+    } catch (err) {
+      console.log(err);
+      setError("Server error");
+    }
+
+    setLoading(false);
+  };
 
   const handleKeyDown = (e) => {
-  if (e.key === "Enter") {
-    handleLogin();
-  }
-};
+    if (e.key === "Enter") {
+      handleLogin();
+    }
+  };
+
   return (
     <div style={styles.page}>
       <div style={styles.wrapper}>

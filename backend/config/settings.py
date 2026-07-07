@@ -27,6 +27,8 @@ INSTALLED_APPS = [
     'attendance',
     'exams',
     'events',
+    'teachingplan',
+
     # Third-party
     'rest_framework',
     'corsheaders',

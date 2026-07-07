@@ -45,6 +45,9 @@ export default function CourseDetails() {
   const [semester, setSemester] =
     useState("");
 
+  const [credits, setCredits] =
+    useState("");
+
   // ================= EDIT SUBJECT =================
   const [
     editingSubjectId,
@@ -54,34 +57,62 @@ export default function CourseDetails() {
   const [activeTab, setActiveTab] =
     useState("structure");
 
+  // full-page loader: first load only
   const [loading, setLoading] =
     useState(true);
 
-  // ================= INIT =================
+  // button-level busy flag (no page-wide spinner)
+  const [saving, setSaving] =
+    useState(false);
+
+  // lazy enrollments for the Students tab
+  const [
+    studentsLoaded,
+    setStudentsLoaded
+  ] = useState(false);
+
+  const [
+    loadingStudents,
+    setLoadingStudents
+  ] = useState(false);
+
+  // ================= INIT (course + years only) =================
   useEffect(() => {
 
     if (id) {
 
-      init();
+      loadCourseAndYears();
     }
 
   }, [id]);
 
-  // ================= LOAD DATA =================
-  const init = async () => {
+  // ================= LAZY: load students only when tab opened =================
+  useEffect(() => {
+
+    if (
+      activeTab === "students" &&
+      !studentsLoaded &&
+      course
+    ) {
+
+      loadStudents();
+    }
+
+  }, [activeTab, studentsLoaded, course]);
+
+  // ================= LOAD COURSE + YEARS =================
+  const loadCourseAndYears = async () => {
 
     try {
 
       setLoading(true);
 
-      // ================= COURSE =================
       const c = await API.get(
         `/courses/${id}/`
       );
 
       setCourse(c.data);
 
-      // ================= YEARS =================
       const y = await API.get(
         `/years/?course=${id}`
       );
@@ -91,26 +122,6 @@ export default function CourseDetails() {
         y.data ||
         []
       );
-
-      // ================= ENROLLMENTS =================
-      const s = await API.get(
-        "/enrollments/"
-      );
-
-      const allStudents =
-        s.data?.results ||
-        s.data ||
-        [];
-
-      // ================= FILTER STUDENTS =================
-      const filteredStudents =
-        allStudents.filter(
-          (e) =>
-            e.course_name ===
-            c.data.name
-        );
-
-      setStudents(filteredStudents);
 
     } catch (err) {
 
@@ -123,6 +134,83 @@ export default function CourseDetails() {
 
       setLoading(false);
     }
+  };
+
+  // ================= LOAD STUDENTS (enrollments) =================
+  const loadStudents = async () => {
+
+    try {
+
+      setLoadingStudents(true);
+
+      const s = await API.get(
+        "/enrollments/"
+      );
+
+      const allStudents =
+        s.data?.results ||
+        s.data ||
+        [];
+
+      const filteredStudents =
+        allStudents.filter(
+          (e) =>
+            e.course_name ===
+            course?.name
+        );
+
+      setStudents(filteredStudents);
+
+      setStudentsLoaded(true);
+
+    } catch (err) {
+
+      console.error(
+        "Enrollments error:",
+        err
+      );
+
+    } finally {
+
+      setLoadingStudents(false);
+    }
+  };
+
+  // ================= LOCAL: upsert a subject into years =================
+  const upsertSubjectInYears = (subj) => {
+
+    setYears((prev) => {
+
+      // remove any existing copy (edit / moved year)
+      let next = prev.map((y) => ({
+        ...y,
+        subjects: (y.subjects || []).filter(
+          (s) => s.id !== subj.id
+        ),
+      }));
+
+      // insert into its target year, keep name order (matches backend)
+      next = next.map((y) => {
+
+        if (y.id === subj.year) {
+
+          const list = [
+            ...(y.subjects || []),
+            subj,
+          ].sort((a, b) =>
+            (a.name || "").localeCompare(
+              b.name || ""
+            )
+          );
+
+          return { ...y, subjects: list };
+        }
+
+        return y;
+      });
+
+      return next;
+    });
   };
 
   // ================= ADD YEAR =================
@@ -139,7 +227,6 @@ export default function CourseDetails() {
       const yearNum =
         Number(year);
 
-      // ================= DUPLICATE CHECK =================
       const exists =
         years.find(
           (y) =>
@@ -157,7 +244,9 @@ export default function CourseDetails() {
 
       try {
 
-        await API.post(
+        setSaving(true);
+
+        const res = await API.post(
           "/years/",
           {
             course: Number(id),
@@ -166,9 +255,23 @@ export default function CourseDetails() {
           }
         );
 
-        setYear("");
+        // instant: append new year locally, keep order
+        setYears((prev) =>
+          [
+            ...prev,
+            {
+              ...res.data,
+              subjects:
+                res.data.subjects || [],
+            },
+          ].sort(
+            (a, b) =>
+              a.year_number -
+              b.year_number
+          )
+        );
 
-        init();
+        setYear("");
 
       } catch (err) {
 
@@ -179,6 +282,10 @@ export default function CourseDetails() {
         alert(
           "Failed to add year"
         );
+
+      } finally {
+
+        setSaving(false);
       }
     };
 
@@ -197,52 +304,46 @@ export default function CourseDetails() {
         );
       }
 
+      const payload = {
+        name: subject,
+        code: code,
+        year: Number(yearId),
+        semester: Number(semester),
+        credits: Number(credits) || 0,
+      };
+
       try {
 
-        // ================= UPDATE =================
+        setSaving(true);
+
+        let res;
+
         if (editingSubjectId) {
 
-          await API.put(
+          res = await API.put(
             `/subjects/${editingSubjectId}/`,
-            {
-              name: subject,
-              code: code,
-              year: Number(yearId),
-              semester: Number(semester),
-            }
-          );
-
-          alert(
-            "Subject updated successfully"
+            payload
           );
 
         } else {
 
-          // ================= CREATE =================
-          await API.post(
+          res = await API.post(
             "/subjects/",
-            {
-              name: subject,
-              code: code,
-              year: Number(yearId),
-              semester: Number(semester),
-            }
-          );
-
-          alert(
-            "Subject added successfully"
+            payload
           );
         }
+
+        // instant: update the list from server response
+        upsertSubjectInYears(res.data);
 
         // ================= RESET =================
         setSubject("");
         setCode("");
         setYearId("");
         setSemester("");
+        setCredits("");
 
         setEditingSubjectId(null);
-
-        init();
 
       } catch (err) {
 
@@ -253,12 +354,16 @@ export default function CourseDetails() {
         alert(
           "Failed to save subject"
         );
+
+      } finally {
+
+        setSaving(false);
       }
     };
 
   // ================= DELETE SUBJECT =================
   const handleDeleteSubject =
-    async (id) => {
+    async (subjectId) => {
 
       if (
         !window.confirm(
@@ -270,11 +375,35 @@ export default function CourseDetails() {
 
       try {
 
+        setSaving(true);
+
         await API.delete(
-          `/subjects/${id}/`
+          `/subjects/${subjectId}/`
         );
 
-        init();
+        // instant: drop it from local state
+        setYears((prev) =>
+          prev.map((y) => ({
+            ...y,
+            subjects: (y.subjects || []).filter(
+              (s) => s.id !== subjectId
+            ),
+          }))
+        );
+
+        // if we were editing this one, clear the form
+        if (
+          editingSubjectId ===
+          subjectId
+        ) {
+
+          setSubject("");
+          setCode("");
+          setYearId("");
+          setSemester("");
+          setCredits("");
+          setEditingSubjectId(null);
+        }
 
       } catch (err) {
 
@@ -283,10 +412,14 @@ export default function CourseDetails() {
         alert(
           "Delete failed"
         );
+
+      } finally {
+
+        setSaving(false);
       }
     };
 
-  // ================= LOADING =================
+  // ================= LOADING (first load only) =================
   if (loading) {
 
     return (
@@ -335,6 +468,18 @@ export default function CourseDetails() {
                 }
               >
                 ← Back
+              </button>
+
+              <button
+                className="btn-primary"
+                style={{ marginLeft: "10px" }}
+                onClick={() =>
+                  navigate(
+                    `/courses/${id}/structure`
+                  )
+                }
+              >
+                View Structure
               </button>
 
               <h2>
@@ -439,8 +584,11 @@ export default function CourseDetails() {
                       onClick={
                         handleAddYear
                       }
+                      disabled={saving}
                     >
-                      Add Year
+                      {saving
+                        ? "Saving..."
+                        : "Add Year"}
                     </button>
 
                   </div>
@@ -458,7 +606,7 @@ export default function CourseDetails() {
 
                   </h3>
 
-                  <div className="form-grid">
+                  <div className="form-grid form-grid--row">
 
                     {/* YEAR */}
                     <select
@@ -537,15 +685,31 @@ export default function CourseDetails() {
                       }
                     />
 
+                    {/* CREDITS */}
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Credits"
+                      value={credits}
+                      onChange={(e) =>
+                        setCredits(
+                          e.target.value
+                        )
+                      }
+                    />
+
                     {/* BUTTON */}
                     <button
                       className="btn-primary"
                       onClick={
                         handleAddSubject
                       }
+                      disabled={saving}
                     >
 
-                      {editingSubjectId
+                      {saving
+                        ? "Saving..."
+                        : editingSubjectId
                         ? "Update Subject"
                         : "Add Subject"}
 
@@ -608,6 +772,10 @@ export default function CourseDetails() {
                               </th>
 
                               <th>
+                                Credits
+                              </th>
+
+                              <th>
                                 Action
                               </th>
 
@@ -645,6 +813,11 @@ export default function CourseDetails() {
                                       }
                                     </td>
 
+                                    {/* CREDITS */}
+                                    <td>
+                                      {s.credits ?? 0}
+                                    </td>
+
                                     {/* ACTIONS */}
                                     <td>
 
@@ -669,6 +842,10 @@ export default function CourseDetails() {
 
                                             setYearId(
                                               s.year
+                                            );
+
+                                            setCredits(
+                                              s.credits ?? ""
                                             );
 
                                             setEditingSubjectId(
@@ -704,7 +881,7 @@ export default function CourseDetails() {
 
                               <tr>
 
-                                <td colSpan="4">
+                                <td colSpan="5">
                                   No subjects
                                 </td>
 
@@ -737,7 +914,13 @@ export default function CourseDetails() {
                   Students
                 </h3>
 
-                {students.length === 0 ? (
+                {loadingStudents ? (
+
+                  <p>
+                    Loading students...
+                  </p>
+
+                ) : students.length === 0 ? (
 
                   <p>
                     No students enrolled

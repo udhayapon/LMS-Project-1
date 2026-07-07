@@ -59,24 +59,99 @@ export default function IqacDashboard() {
     }
   };
 
-  // initial load
   useEffect(() => {
     loadSummary("");
     loadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // reload list when filters change
   useEffect(() => {
     loadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, category, teacher]);
 
-  // reload summary when year changes
   useEffect(() => {
     loadSummary(year);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year]);
+
+  // ---------- PRINT REPORT ----------
+  const printReport = () => {
+    if (!summary) return;
+    const yearLabel = year || "All Academic Years";
+    const today = new Date().toLocaleDateString();
+
+    const catRows = (summary.by_category || [])
+      .map((c) => `<tr><td>${c.label}</td><td style="text-align:right">${c.count}</td></tr>`)
+      .join("");
+
+    const deptRows = (summary.by_department || [])
+      .map((d) => `<tr><td>${d.department}</td><td style="text-align:right">${d.count}</td></tr>`)
+      .join("");
+
+    const teacherRows = (summary.by_teacher || [])
+      .map(
+        (t) =>
+          `<tr><td>${t.name}</td><td>${t.employee_id || "—"}</td><td>${t.department}</td><td style="text-align:right">${t.count}</td></tr>`
+      )
+      .join("");
+
+    const html = `
+      <html>
+      <head>
+        <title>IQAC Faculty Participation Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; color: #1e293b; padding: 32px; }
+          h1 { font-size: 22px; margin: 0 0 4px; }
+          .sub { color: #64748b; font-size: 13px; margin-bottom: 24px; }
+          h2 { font-size: 15px; margin: 26px 0 8px; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 13px; }
+          th, td { border: 1px solid #e2e8f0; padding: 7px 10px; text-align: left; }
+          th { background: #f8fafc; }
+          .stat { display: inline-block; margin-right: 28px; }
+          .stat b { font-size: 22px; display: block; }
+          .stat span { font-size: 12px; color: #64748b; }
+          @media print { button { display: none; } }
+        </style>
+      </head>
+      <body>
+        <h1>IQAC — Faculty Participation Report</h1>
+        <div class="sub">Academic Year: ${yearLabel} &nbsp;•&nbsp; Generated: ${today}</div>
+
+        <div>
+          <div class="stat"><b>${summary.total ?? 0}</b><span>Total Activities</span></div>
+          <div class="stat"><b>${summary.by_teacher?.length ?? 0}</b><span>Faculty Involved</span></div>
+          <div class="stat"><b>${summary.by_department?.length ?? 0}</b><span>Departments</span></div>
+        </div>
+
+        <h2>By Department</h2>
+        <table>
+          <thead><tr><th>Department</th><th style="text-align:right">Activities</th></tr></thead>
+          <tbody>${deptRows || '<tr><td colspan="2">No data</td></tr>'}</tbody>
+        </table>
+
+        <h2>By Category</h2>
+        <table>
+          <thead><tr><th>Category</th><th style="text-align:right">Activities</th></tr></thead>
+          <tbody>${catRows || '<tr><td colspan="2">No data</td></tr>'}</tbody>
+        </table>
+
+        <h2>By Faculty</h2>
+        <table>
+          <thead><tr><th>Faculty</th><th>Employee ID</th><th>Department</th><th style="text-align:right">Activities</th></tr></thead>
+          <tbody>${teacherRows || '<tr><td colspan="4">No data</td></tr>'}</tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 300);
+  };
 
   return (
     <div className="app">
@@ -87,11 +162,27 @@ export default function IqacDashboard() {
           <div className="content">
             <div className="sd-root">
 
-              <h1 className="sd-hello">IQAC — Faculty Participation</h1>
-              <p className="sd-sub">All faculty activities recorded for NAAC, with totals.</p>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <h1 className="sd-hello">IQAC — Faculty Participation</h1>
+                  <p className="sd-sub">All faculty activities recorded for NAAC, with totals.</p>
+                </div>
+                <button
+                  onClick={printReport}
+                  disabled={!summary || summary.total === 0}
+                  style={{
+                    background: (!summary || summary.total === 0) ? "#cbd5e1" : "#1d4ed8",
+                    color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px",
+                    fontSize: 13, fontWeight: 600, cursor: (!summary || summary.total === 0) ? "default" : "pointer",
+                    marginTop: 6, whiteSpace: "nowrap",
+                  }}
+                >
+                  Print / Save Report
+                </button>
+              </div>
 
               {/* ===== TOP STATS ===== */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16, marginTop: 8 }}>
                 <div className="sd-card">
                   <div className="sd-label">Total Activities</div>
                   <div className="sd-val">{summary?.total ?? "—"}</div>
@@ -103,11 +194,7 @@ export default function IqacDashboard() {
                 <div className="sd-card">
                   <div className="sd-label">Academic Year</div>
                   <div className="sd-val" style={{ fontSize: 20 }}>
-                    <select
-                      value={year}
-                      onChange={(e) => setYear(e.target.value)}
-                      style={{ fontSize: 14, padding: "4px 6px" }}
-                    >
+                    <select value={year} onChange={(e) => setYear(e.target.value)} style={{ fontSize: 14, padding: "4px 6px" }}>
                       <option value="">All years</option>
                       {(summary?.years || []).map((y) => <option key={y} value={y}>{y}</option>)}
                     </select>
@@ -115,7 +202,24 @@ export default function IqacDashboard() {
                 </div>
               </div>
 
-              {/* ===== COUNTS PER CATEGORY ===== */}
+              {/* ===== BY DEPARTMENT ===== */}
+              <div className="sd-panel" style={{ marginBottom: 16 }}>
+                <div className="sd-pt">By department</div>
+                {summary?.by_department?.length ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+                    {summary.by_department.map((d) => (
+                      <div key={d.department} style={{ border: "1px solid #eaecf0", borderRadius: 10, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{d.department}</span>
+                        <span style={{ fontSize: 20, fontWeight: 700, color: "#0e9384" }}>{d.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="sd-empty">No activities recorded yet.</div>
+                )}
+              </div>
+
+              {/* ===== BY CATEGORY ===== */}
               <div className="sd-panel" style={{ marginBottom: 16 }}>
                 <div className="sd-pt">By category</div>
                 {summary?.by_category?.length ? (
@@ -147,11 +251,7 @@ export default function IqacDashboard() {
                     </thead>
                     <tbody>
                       {summary.by_teacher.map((t) => (
-                        <tr
-                          key={t.id}
-                          onClick={() => setTeacher(String(t.id))}
-                          style={{ cursor: "pointer" }}
-                        >
+                        <tr key={t.id} onClick={() => setTeacher(String(t.id))} style={{ cursor: "pointer" }}>
                           <td>{t.name}</td>
                           <td className="sd-num">{t.employee_id || "—"}</td>
                           <td>{t.department}</td>
@@ -216,9 +316,7 @@ export default function IqacDashboard() {
                           <td className="sd-num">{r.date}</td>
                           <td>
                             {r.proof_url ? (
-                              <a href={r.proof_url} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", fontSize: 13 }}>
-                                View
-                              </a>
+                              <a href={r.proof_url} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", fontSize: 13 }}>View</a>
                             ) : (
                               <span style={{ color: "#98a2b3", fontSize: 13 }}>—</span>
                             )}

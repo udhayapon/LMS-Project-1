@@ -1,6 +1,14 @@
 from rest_framework import serializers
 
-from .models import (User, Department, FacultyParticipation)
+from .models import (
+    User,
+    Department,
+    FacultyParticipation,
+    StudentProfile,
+    FacultyProfile,
+    ParentProfile,
+)
+
 
 # ================= DEPARTMENT =================
 class DepartmentSerializer(serializers.ModelSerializer):
@@ -12,37 +20,66 @@ class DepartmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Department
-        fields = ['id','name','hod','hod_name', ]
+        fields = ['id', 'name', 'hod', 'hod_name']
+
+
+# ================= PROFILE SERIALIZERS =================
+# Small serializers for the detail tables. Used for reading a user's
+# profile back and (via UserSerializer) for saving one.
+
+class StudentProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StudentProfile
+        exclude = ['id', 'user']
+
+
+class FacultyProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FacultyProfile
+        exclude = ['id', 'user']
+
+
+class ParentProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ParentProfile
+        exclude = ['id', 'user']
 
 
 # ================= USER =================
 class UserSerializer(serializers.ModelSerializer):
 
-    # ================= DEPARTMENT NAME =================
-    department_name = serializers.CharField(
-        source='department.name',
-        read_only=True
-    )
-
-    # ================= COURSE NAME =================
-    course_name = serializers.CharField(
-        source='course.name',
-        read_only=True
-    )
-
-    # ================= DEPARTMENT CODE =================
+    # ---- read-only display helpers ----
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    course_name = serializers.CharField(source='course.name', read_only=True)
     department_code = serializers.SerializerMethodField()
+    role_label = serializers.CharField(source='get_role_display', read_only=True)
+    sub_role_label = serializers.CharField(source='get_sub_role_display', read_only=True)
+
+    # ---- profile ----
+    # WRITE: the frontend sends a single "profile" object with the detail
+    #        fields (address, dob, qualification, etc.).
+    # READ:  "profile_data" returns that user's profile back.
+    profile = serializers.DictField(write_only=True, required=False)
+    profile_data = serializers.SerializerMethodField()
+
+    # which main role uses which profile table
+    PROFILE_MODEL = {
+        'student': StudentProfile,
+        'teacher': FacultyProfile,
+        'non_teaching': FacultyProfile,
+    }
 
     class Meta:
-
         model = User
-
         fields = [
             'id',
             'username',
             'password',
             'email',
             'role',
+            'role_label',
+            'sub_role',
+            'sub_role_label',
             'department',
             'department_name',
             'department_code',
@@ -51,145 +88,112 @@ class UserSerializer(serializers.ModelSerializer):
             'roll_number',
             'employee_id',
             'year',
-            'semester'
+            'semester',
+            'batch_year',
+            'is_active',
+            'profile',
+            'profile_data',
         ]
-
         extra_kwargs = {
-            'password': {
-                'write_only': True,
-                'required': False
-            },
-
-            'email': {
-                'required': True
-            },
-
-            'roll_number': {
-              'read_only': True
-            },
-
-            'employee_id': {
-                'read_only': True
-            }
+            'password': {'write_only': True, 'required': False},
+            'email': {'required': True},
+            'roll_number': {'read_only': True},
+            'employee_id': {'read_only': True},
         }
 
-    # ================= DEPARTMENT CODE METHOD =================
-    def get_department_code( self, obj):
-
+    # ================= DEPARTMENT CODE =================
+    def get_department_code(self, obj):
         if obj.department:
-
-            return ( obj.department.name[:3].upper())
-
+            return obj.department.name[:3].upper()
         return ""
 
+    # ================= PROFILE READ =================
+    def get_profile_data(self, obj):
+        if obj.role == 'student' and hasattr(obj, 'student_profile'):
+            return StudentProfileSerializer(obj.student_profile).data
+        if obj.role in ('teacher', 'non_teaching') and hasattr(obj, 'faculty_profile'):
+            return FacultyProfileSerializer(obj.faculty_profile).data
+        if obj.role == 'parent' and hasattr(obj, 'parent_profile'):
+            return ParentProfileSerializer(obj.parent_profile).data
+        return None
+
     # ================= VALIDATE USERNAME =================
-    def validate_username(self,value):
-
+    def validate_username(self, value):
         if not value:
-
-            raise serializers.ValidationError("Username is required" )
-
+            raise serializers.ValidationError("Username is required")
         return value
 
     # ================= VALIDATE EMAIL =================
-    def validate_email(self,value ):
-
+    def validate_email(self, value):
         if not value:
-            raise serializers.ValidationError( "Email is required")
+            raise serializers.ValidationError("Email is required")
 
         user = self.instance
-
+        qs = User.objects.filter(email=value)
         if user:
-
-            if User.objects.filter(
-                email=value
-            ).exclude(
-                id=user.id
-            ).exists():
-
-                raise serializers.ValidationError("Email already exists" )
-
-        else:
-
-            if User.objects.filter(
-                email=value
-            ).exists():
-
-                raise serializers.ValidationError( "Email already exists" )
-
+            qs = qs.exclude(id=user.id)
+        if qs.exists():
+            raise serializers.ValidationError("Email already exists")
         return value
 
     # ================= VALIDATE ROLE =================
-    def validate_role(  self, value):
-
-        valid_roles = [
-            'student',
-            'teacher',
-            'admin',
-            'parent',
-            'accounts_admin',
-            'exam_admin',
-            'academic_admin',
-            'iqac_admin',
-        ]
-
+    def validate_role(self, value):
+        valid_roles = ['student', 'teacher', 'admin', 'non_teaching', 'parent']
         if value not in valid_roles:
-
-            raise serializers.ValidationError("Invalid role" )
-
+            raise serializers.ValidationError("Invalid role")
         return value
 
+    # ================= PROFILE SAVE HELPER =================
+    def _save_profile(self, user, profile_data):
+        model_cls = self.PROFILE_MODEL.get(user.role)
+        if model_cls is None:
+            # admins and parents don't use these detail tables here
+            return
+        if not profile_data:
+            return
+
+        # keep only real fields of the model, drop anything unexpected
+        valid_fields = {f.name for f in model_cls._meta.get_fields()}
+        clean = {
+            k: v for k, v in profile_data.items()
+            if k in valid_fields and k not in ('id', 'user')
+        }
+
+        obj, _ = model_cls.objects.get_or_create(user=user)
+        for attr, value in clean.items():
+            setattr(obj, attr, value)
+        obj.save()
+
     # ================= CREATE USER =================
-    def create(self,validated_data):
+    def create(self, validated_data):
+        profile_data = validated_data.pop('profile', None)
+        password = validated_data.pop('password', None)
 
-        password = validated_data.pop(
-            'password',
-            None
-        )
-
-        user = User(
-            **validated_data
-        )
-
+        user = User(**validated_data)
         if password:
-
-            user.set_password(
-                password
-            )
-
+            user.set_password(password)
         else:
+            user.set_password(User.objects.make_random_password())
+        user.save()   # roll number / employee id auto-generate here
 
-            user.set_password(
-                User.objects.make_random_password()
-            )
-
-        user.save()
-
+        self._save_profile(user, profile_data)
         return user
 
     # ================= UPDATE USER =================
-    def update(self,instance,validated_data ):
-
-        password = validated_data.pop(
-            'password',
-            None
-        )
+    def update(self, instance, validated_data):
+        profile_data = validated_data.pop('profile', None)
+        password = validated_data.pop('password', None)
 
         for attr, value in validated_data.items():
-
-            setattr(
-                instance,
-                attr,
-                value
-            )
+            setattr(instance, attr, value)
 
         if password:
-
-            instance.set_password(
-                password
-            )
+            instance.set_password(password)
 
         instance.save()
+
+        if profile_data is not None:
+            self._save_profile(instance, profile_data)
 
         return instance
 
@@ -227,7 +231,6 @@ class FacultyParticipationSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         extra_kwargs = {
-            # faculty is set from the logged-in user in the view, never sent by the client
             'faculty': {'read_only': True},
             'proof': {'write_only': True, 'required': False},
         }
