@@ -35,6 +35,8 @@ from .views import (
     iqac_participation_list,
     iqac_participation_summary,
     iqac_academic_quality,
+    hod_allocation_subjects,
+    hod_allocate,
 )
 
 router = DefaultRouter()
@@ -60,6 +62,9 @@ urlpatterns = [
     path('hod-tutor-grid/<int:course_id>/', hod_tutor_grid),
     path('hod-assign-tutor/', hod_assign_tutor),
     path('hod-remove-tutor/<int:tutor_id>/', hod_remove_tutor),
+    # ================= HOD FACULTY ALLOCATION =================
+    path('hod/allocation/', hod_allocation_subjects),
+    path('hod/allocate/', hod_allocate),
 
     path('my-class/', my_class),
     path('my-class/student/<int:student_id>/report/', tutor_student_report),

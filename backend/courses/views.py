@@ -1,4 +1,8 @@
 # ===================== IMPORTS =====================
+import os
+import json
+import re
+import requests
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.db import models
@@ -8,7 +12,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import (  api_view, permission_classes, action)
 from rest_framework.permissions import ( IsAuthenticated, BasePermission, SAFE_METHODS)
 from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework import status
 
 from attendance.models import Attendance
@@ -723,6 +727,163 @@ class SubmissionViewSet(viewsets.ModelViewSet):
                 submission.assignment.teaching_assignment
             )
         
+# ===================== QUIZ AI =====================
+# correct_answer is 1-BASED: 1 -> option1 ... 4 -> option4.
+# Confirmed against live data. Do not change without also changing the grading
+# comparison in the quiz submit action.
+OPTION_COUNT = 4
+MIN_CORRECT = 1
+MAX_CORRECT = OPTION_COUNT
+OPTION_MAX_LEN = 200          # Question.option1..4 are CharField(max_length=200)
+MAX_GENERATE = 30
+
+
+def _quiz_ai_generate(subject_name, notes, count):
+    """
+    Ask Gemini for `count` MCQs from the teacher's pasted notes.
+    Sends ONLY subject name + notes + count. No student data — the Gemini free
+    tier may train on prompts.
+    Does NOT validate content; that is save_questions' job.
+    """
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not key:
+        raise ValueError("GEMINI_API_KEY is not set in the environment.")
+
+    prompt = (
+        f"Write {count} multiple-choice questions for a college subject "
+        f"called \"{subject_name}\", based ONLY on the notes below.\n\n"
+        "NOTES:\n" + notes + "\n\n"
+        "Rules:\n"
+        f"- Exactly {OPTION_COUNT} options per question.\n"
+        "- Exactly ONE option is correct.\n"
+        "- correct_answer is the 1-based position of the correct option "
+        "(1 = first option, 4 = fourth option).\n"
+        f"- Keep every option under {OPTION_MAX_LEN} characters.\n"
+        "- Do not repeat a question.\n\n"
+        "Return ONLY a JSON array, no markdown, no explanation:\n"
+        '[{"text": "...", "option1": "...", "option2": "...", '
+        '"option3": "...", "option4": "...", "correct_answer": 1}]'
+    )
+
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        "gemini-flash-latest:generateContent?key=" + key
+    )
+    r = requests.post(
+        url,
+        headers={"content-type": "application/json"},
+        json={"contents": [{"parts": [{"text": prompt}]}]},
+        timeout=45,
+    )
+    data = r.json()
+    if "candidates" not in data:
+        raise ValueError(f"Gemini error: {data}")
+
+    text = data["candidates"][0]["content"]["parts"][0]["text"]
+
+    text = re.sub(r"```(?:json)?", "", text).strip()
+    m = re.search(r"\[.*\]", text, re.S)
+    if not m:
+        raise ValueError(f"No JSON array in reply: {text[:300]}")
+
+    parsed = json.loads(m.group(0))
+    if not isinstance(parsed, list):
+        raise ValueError("Gemini did not return a JSON array.")
+    return parsed
+
+
+def _clean_draft_row(row):
+    """
+    Shape one AI row for the draft grid. Best-effort: a bad row is dropped from
+    the DRAFT, never saved silently. Real enforcement is in _validate_question.
+    """
+    if not isinstance(row, dict):
+        return None
+
+    text = str(row.get("text") or "").strip()
+    if not text:
+        return None
+
+    options = []
+    for i in range(1, OPTION_COUNT + 1):
+        opt = str(row.get(f"option{i}") or "").strip()
+        if not opt:
+            return None
+        options.append(opt[:OPTION_MAX_LEN])
+
+    try:
+        correct = int(row.get("correct_answer"))
+    except (TypeError, ValueError):
+        return None
+    if not (MIN_CORRECT <= correct <= MAX_CORRECT):
+        return None
+
+    return {
+        "text": text,
+        "option1": options[0],
+        "option2": options[1],
+        "option3": options[2],
+        "option4": options[3],
+        "correct_answer": correct,
+        "marks": 1,
+    }
+
+
+def _validate_question(row, index):
+    """
+    THE GATE. Every question that reaches the database passes through here —
+    AI-generated or hand-edited by the teacher. A human having looked at a draft
+    is not validation: a teacher can delete the wrong option just as easily as
+    the model can.
+    Returns (cleaned_dict, error_string) — exactly one of the two is None.
+    """
+    label = f"Question {index}"
+
+    if not isinstance(row, dict):
+        return None, f"{label}: not a valid question."
+
+    text = str(row.get("text") or "").strip()
+    if not text:
+        return None, f"{label}: question text is empty."
+
+    options = []
+    for i in range(1, OPTION_COUNT + 1):
+        opt = str(row.get(f"option{i}") or "").strip()
+        if not opt:
+            return None, f"{label}: option {i} is empty."
+        if len(opt) > OPTION_MAX_LEN:
+            return None, (
+                f"{label}: option {i} is {len(opt)} characters "
+                f"(max {OPTION_MAX_LEN})."
+            )
+        options.append(opt)
+
+    try:
+        correct = int(row.get("correct_answer"))
+    except (TypeError, ValueError):
+        return None, f"{label}: correct answer must be a number from 1 to {MAX_CORRECT}."
+    if not (MIN_CORRECT <= correct <= MAX_CORRECT):
+        return None, (
+            f"{label}: correct answer is {correct}, "
+            f"must be from {MIN_CORRECT} to {MAX_CORRECT}."
+        )
+
+    try:
+        marks = int(row.get("marks", 1))
+    except (TypeError, ValueError):
+        return None, f"{label}: marks must be a whole number."
+    if marks < 1:
+        return None, f"{label}: marks must be at least 1."
+
+    return {
+        "text": text,
+        "option1": options[0],
+        "option2": options[1],
+        "option3": options[2],
+        "option4": options[3],
+        "correct_answer": correct,
+        "marks": marks,
+    }, None
 
 # ===================== QUIZ =====================
 class QuizViewSet(viewsets.ModelViewSet):
@@ -921,8 +1082,112 @@ class QuizViewSet(viewsets.ModelViewSet):
             "score": score,
             "total_marks": quiz.total_marks
         })
+    
+    # ================= AI: GENERATE DRAFT QUESTIONS =================
+    @action(detail=True, methods=["post"], url_path="generate-questions")
+    def generate_questions(self, request, pk=None):
+        """
+        Teacher pastes notes -> Gemini proposes questions -> returned as a DRAFT.
+        NOTHING IS SAVED HERE. Only save_questions writes rows.
 
+        Ownership comes free from get_queryset (a teacher's queryset is filtered
+        to teaching_assignment__teacher=user), so get_object() cannot return
+        another teacher's quiz. No second ownership rule is defined here.
+        """
+        quiz = self.get_object()
 
+        if request.user.role not in ("teacher", "admin"):
+            raise PermissionDenied("Only teachers can generate questions.")
+
+        notes = (request.data.get("notes") or "").strip()
+        if not notes:
+            raise ValidationError("Paste the notes to generate questions from.")
+
+        try:
+            count = int(request.data.get("count", 10))
+        except (TypeError, ValueError):
+            count = 10
+        count = max(1, min(MAX_GENERATE, count))
+
+        subject_name = quiz.teaching_assignment.subject.name
+
+        try:
+            raw = _quiz_ai_generate(subject_name, notes, count)
+        except Exception as e:
+            # Surface it. A silent empty draft is exactly the bug that hides for weeks.
+            return Response(
+                {"detail": f"Could not generate questions: {e}"},
+                status=502,
+            )
+
+        draft = [c for c in (_clean_draft_row(r) for r in raw) if c]
+
+        note = None
+        if len(draft) < count:
+            note = (
+                f"AI returned {len(draft)} usable question(s) out of {count} "
+                "requested. Review them, then add more if you need them."
+            )
+
+        return Response({
+            "draft": draft,          # NOT saved — the teacher reviews this first
+            "requested": count,
+            "note": note,
+        })
+
+    # ================= SAVE REVIEWED QUESTIONS =================
+    @action(detail=True, methods=["post"], url_path="save-questions")
+    def save_questions(self, request, pk=None):
+        """
+        The teacher submits the reviewed/edited draft. This is the ONLY path that
+        creates Question rows, and every row is validated here first.
+
+        All-or-nothing: if any question fails, none are saved. A half-written quiz
+        is worse than a rejected one — a student would sit it and be graded on the
+        half that landed.
+
+        Questions are APPENDED. Existing (including hand-written) ones are untouched.
+        """
+        quiz = self.get_object()
+
+        if request.user.role not in ("teacher", "admin"):
+            raise PermissionDenied("Only teachers can save questions.")
+
+        questions = request.data.get("questions")
+        if not isinstance(questions, list) or not questions:
+            raise ValidationError("Send at least one question to save.")
+
+        cleaned, errors = [], []
+        for i, row in enumerate(questions, start=1):
+            ok, err = _validate_question(row, i)
+            if err:
+                errors.append(err)
+            else:
+                cleaned.append(ok)
+
+        if errors:
+            return Response(
+                {"detail": "No questions were saved. Fix these first:", "errors": errors},
+                status=400,
+            )
+
+        created = [Question.objects.create(quiz=quiz, **row) for row in cleaned]
+
+        # get_queryset uses prefetch_related("questions"), so quiz.questions.all()
+        # is a CACHE captured before these rows existed — it would sum to zero.
+        # Query the table directly for the real, current set.
+        all_questions = Question.objects.filter(quiz=quiz)
+
+        # total_marks is DERIVED, never taken from the client.
+        quiz.total_marks = sum(q.marks for q in all_questions)
+        quiz.save(update_fields=["total_marks"])
+
+        return Response({
+            "message": f"{len(created)} question(s) saved.",
+            "created": len(created),
+            "total_questions": all_questions.count(),
+            "total_marks": quiz.total_marks,
+        })
 # ===================== QUESTION =====================
 class QuestionViewSet(viewsets.ModelViewSet):
 
@@ -1001,7 +1266,7 @@ class QuizAttemptViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
 
-        raise ValidationError.save(
+        raise ValidationError(
             "Use the quiz submit endpoint to attempt a quiz."
         )
 
@@ -1144,47 +1409,13 @@ def generate_enrollments(request):
             },
             status=403
         )
-    
+
+    from courses.services import enroll_student
+
     created_count = 0
 
-    students = User.objects.filter(
-        role='student'
-    )
-
-    for student in students:
-
-        if (
-            not student.course
-            or not student.year
-            or not student.semester
-        ):
-            continue
-
-        teaching_assignments = TeachingAssignment.objects.filter(
-            course=student.course,
-
-            year__year_number=
-            student.year,
-
-            subject__semester=
-            student.semester
-        )
-
-        for assignment in teaching_assignments:
-
-            exists = Enrollment.objects.filter(
-                student=student,
-                teaching_assignment=assignment
-            ).exists()
-
-            if not exists:
-
-                Enrollment.objects.create(
-                    student=student,
-                    teaching_assignment=assignment
-                )
-
-                created_count += 1
+    for student in User.objects.filter(role='student'):
+        created_count += enroll_student(student)
 
     return Response(
         {
@@ -1192,6 +1423,114 @@ def generate_enrollments(request):
             "created": created_count
         },
         status=status.HTTP_200_OK
+    )
+
+# ===================== ELECTIVE SELF-ENROLLMENT =====================
+# A student sees the electives offered for their own course + year + semester,
+# and enrols / un-enrols themselves. Core subjects are auto-enrolled elsewhere;
+# ONLY subjects with is_elective=True are self-serve, and a student can only
+# ever touch electives in their OWN class.
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_electives(request):
+    """
+    GET /my-electives/
+    The electives offered to THIS student (their course/year/semester), each
+    flagged with whether they're already enrolled.
+    """
+    user = request.user
+    if getattr(user, "role", None) != "student":
+        return Response({"detail": "Only students have electives."}, status=403)
+
+    if not user.course or not user.year or not user.semester:
+        return Response([])
+
+    # every elective teaching-assignment for this student's exact class
+    assignments = (
+        TeachingAssignment.objects
+        .filter(
+            course=user.course,
+            year__year_number=user.year,
+            subject__semester=user.semester,
+            subject__is_elective=True,
+        )
+        .select_related("subject", "teacher")
+        .order_by("subject__name")
+    )
+
+    # which of them this student is already in
+    mine = set(
+        Enrollment.objects
+        .filter(student=user, teaching_assignment__in=assignments)
+        .values_list("teaching_assignment_id", flat=True)
+    )
+
+    data = [
+        {
+            "teaching_assignment": a.id,
+            "subject": a.subject.name,
+            "code": a.subject.code or "",
+            "credits": a.subject.credits,
+            "teacher_name": (a.teacher.get_full_name() or "").strip() or a.teacher.username,
+            "enrolled": a.id in mine,
+        }
+        for a in assignments
+    ]
+    return Response(data)
+
+
+@api_view(["POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def elective_enroll(request):
+    """
+    POST   /elective-enroll/   body { "teaching_assignment": <id> }  -> enrol
+    DELETE /elective-enroll/   body { "teaching_assignment": <id> }  -> un-enrol
+
+    Guardrails: the target must be an ELECTIVE in the student's OWN
+    course/year/semester. A student can't self-enrol into a core subject,
+    another class, or someone else's elective.
+    """
+    user = request.user
+    if getattr(user, "role", None) != "student":
+        return Response({"detail": "Only students can choose electives."}, status=403)
+
+    ta_id = request.data.get("teaching_assignment")
+    if not ta_id:
+        return Response({"detail": "teaching_assignment is required."}, status=400)
+
+    # the TA must be an elective in EXACTLY this student's class
+    ta = (
+        TeachingAssignment.objects
+        .filter(
+            id=ta_id,
+            course=user.course,
+            year__year_number=user.year,
+            subject__semester=user.semester,
+            subject__is_elective=True,
+        )
+        .first()
+    )
+    if not ta:
+        return Response(
+            {"detail": "That elective is not available for your class."},
+            status=404,
+        )
+
+    if request.method == "POST":
+        _, created = Enrollment.objects.get_or_create(
+            student=user,
+            teaching_assignment=ta,
+        )
+        return Response(
+            {"detail": "Enrolled.", "teaching_assignment": ta.id, "enrolled": True},
+            status=201 if created else 200,
+        )
+
+    # DELETE -> drop it
+    Enrollment.objects.filter(student=user, teaching_assignment=ta).delete()
+    return Response(
+        {"detail": "Removed.", "teaching_assignment": ta.id, "enrolled": False}
     )
 
 # ===================== DISCUSSION MESSAGE =====================

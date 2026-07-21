@@ -83,6 +83,22 @@ class Subject(models.Model):
         default=0
     )
 
+    weekly_hours = models.IntegerField(
+        default=0
+    )
+
+    is_elective = models.BooleanField(
+        default=False
+    )
+    # ================= DEPARTMENT (owner) =================
+    department = models.ForeignKey(
+        'users.Department',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='subjects'
+    )
+
     class Meta:
 
         # Alphabetical ordering

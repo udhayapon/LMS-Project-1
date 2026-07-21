@@ -1,4 +1,4 @@
-# backend/teaching_plans/serializers.py
+# backend/teachingplan/serializers.py
 from datetime import date
 from django.apps import apps
 from rest_framework import serializers
@@ -27,6 +27,38 @@ def _fmt_date(d):
     return f"{d.strftime('%b')} {d.day}"
 
 
+def year_label(year):
+    """A human class label from a Year row: 'B.E EEE - Year 1' style.
+
+    MUST stay byte-identical to teachingplan/views.year_label(). The student view
+    matches TeachingPlan.class_section against labels built by that function, so
+    any drift between the two silently hides every plan from students.
+    """
+    if not year:
+        return ""
+    try:
+        return f"{year.course.name} - Year {year.year_number}"
+    except Exception:
+        return str(year)
+
+
+def class_labels_for(teacher, subject):
+    """Every class label this teacher actually teaches this subject to.
+
+    The class is a property of the TeachingAssignment, not something the teacher
+    picks. Returns [] if there is no assignment (which means they shouldn't be
+    writing a plan for this subject at all).
+    """
+    try:
+        TA = apps.get_model("courses", "TeachingAssignment")
+        assignments = (TA.objects
+                       .filter(teacher=teacher, subject=subject)
+                       .select_related("year", "year__course"))
+        return [lbl for lbl in (year_label(a.year) for a in assignments) if lbl]
+    except Exception:
+        return []
+
+
 # ---------- units ----------
 class PlanUnitSerializer(serializers.ModelSerializer):
     # 'due' is what the frontend reads/writes; it maps to complete_by.
@@ -34,7 +66,10 @@ class PlanUnitSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PlanUnit
-        fields = ["id", "topic", "hours", "due", "sequence_no",
+        # period_no MUST be listed here. DRF silently discards any field that is not
+        # declared — no error, no warning — so leaving it out means the frontend keeps
+        # sending the period and the serializer keeps throwing it away.
+        fields = ["id", "topic", "hours", "due", "period_no", "sequence_no",
                   "is_completed", "actual_completed_date"]
 
 
@@ -45,6 +80,8 @@ class TeachingPlanWriteSerializer(serializers.ModelSerializer):
     subject = serializers.PrimaryKeyRelatedField(
         queryset=apps.get_model(SUBJECT_MODEL).objects.all()
     )
+    # The client may send this, but it is NOT trusted — see validate() below.
+    class_section = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = TeachingPlan
@@ -55,6 +92,35 @@ class TeachingPlanWriteSerializer(serializers.ModelSerializer):
         if value not in ("draft", "submitted"):
             raise serializers.ValidationError("Status must be 'draft' or 'submitted'.")
         return value
+
+    def validate(self, attrs):
+        """Overwrite class_section with the authoritative value from the timetable.
+
+        Previously this came straight from a dropdown that had no link to the
+        selected subject, so a teacher who taught two classes could silently save
+        a plan against the wrong one — and the student view, which matches on this
+        exact string, would then never show it to anyone.
+        """
+        request = self.context.get("request")
+        teacher = getattr(request, "user", None)
+        subject = attrs.get("subject")
+
+        if teacher is None or subject is None:
+            return attrs
+
+        valid = class_labels_for(teacher, subject)
+        if not valid:
+            raise serializers.ValidationError({
+                "subject": "You are not assigned to teach this subject to any class."
+            })
+
+        sent = (attrs.get("class_section") or "").strip()
+        if sent in valid:
+            attrs["class_section"] = sent      # teacher teaches it to >1 class, and picked a real one
+        else:
+            attrs["class_section"] = valid[0]  # ignore whatever the client sent
+
+        return attrs
 
     def create(self, validated_data):
         units_data = validated_data.pop("units", [])
@@ -88,6 +154,9 @@ class TeachingPlanWriteSerializer(serializers.ModelSerializer):
                 topic=u.get("topic", ""),
                 hours=u.get("hours", 0),
                 complete_by=u.get("complete_by"),
+                # (complete_by, period_no) identifies the class hour. Without period_no
+                # a subject that meets twice on one date has two indistinguishable rows.
+                period_no=u.get("period_no"),
                 sequence_no=u.get("sequence_no", i),
             )
         return plan

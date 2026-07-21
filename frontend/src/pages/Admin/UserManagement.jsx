@@ -76,6 +76,18 @@ const EMPTY_FORM = {
   occupation: "",
 };
 
+// ================= STABLE FIELD WRAPPER =================
+// Defined OUTSIDE the component so React keeps the same element across renders.
+// (Defining it inside caused inputs to lose focus after every keystroke.)
+function Field({ label, children }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={lbl}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
 export default function UserManagement() {
 
   // ================= STATES =================
@@ -86,6 +98,8 @@ export default function UserManagement() {
 
   const [roleFilter, setRoleFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [deptFilter, setDeptFilter] = useState("all");
+  const [semFilter, setSemFilter] = useState("all");
 
   // add / edit modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -199,6 +213,14 @@ export default function UserManagement() {
       specialization: p.specialization || "",
       date_of_joining: p.date_of_joining || "",
       experience_years: p.experience_years || "",
+      // guardian details (merged back from the linked parent by the serializer).
+      // Only one guardian name is stored, so it pre-fills father_name;
+      // mother_name stays blank because it isn't persisted separately.
+      father_name: p.guardian_name || "",
+      mother_name: "",
+      guardian_phone: p.guardian_phone || "",
+      guardian_email: p.guardian_email || "",
+      occupation: p.occupation || "",
     });
     setStep(1);
     setModalOpen(true);
@@ -247,7 +269,8 @@ export default function UserManagement() {
 
     if (form.role === "student") {
       ["gender", "date_of_birth", "blood_group", "address_line1", "address_line2",
-       "city", "district", "state", "pincode", "admission_date"].forEach(addIf);
+       "city", "district", "state", "pincode", "admission_date",
+       "father_name", "mother_name", "guardian_phone", "guardian_email", "occupation"].forEach(addIf);
     }
 
     if (form.role === "teacher" || form.role === "non_teaching") {
@@ -399,24 +422,24 @@ export default function UserManagement() {
   // ================= FILTER =================
   const filteredUsers = users.filter((u) => {
     const roleMatch = roleFilter === "all" || u.role === roleFilter;
+    const deptMatch =
+      deptFilter === "all" || String(u.department) === String(deptFilter);
+    const semMatch =
+      semFilter === "all" || String(u.semester) === String(semFilter);
     const text = search.toLowerCase();
     const searchMatch =
       (u.username || "").toLowerCase().includes(text) ||
+      (u.first_name || "").toLowerCase().includes(text) ||
       (u.roll_number || "").toLowerCase().includes(text) ||
       (u.employee_id || "").toLowerCase().includes(text);
-    return roleMatch && searchMatch;
+    return roleMatch && deptMatch && semMatch && searchMatch;
   });
 
   const subRoleOptions = SUB_ROLES[form.role] || [];
 
-  // ================= FIELD HELPERS (for the modal) =================
-  const Field = ({ label, children }) => (
-    <div style={{ marginBottom: 14 }}>
-      <div style={lbl}>{label}</div>
-      {children}
-    </div>
-  );
-
+  // ================= FIELD HELPER (for the modal) =================
+  // NOTE: `Field` is defined at module scope (bottom of this file) so it is NOT
+  // recreated on every render — that is what was stealing focus after one letter.
   const textInput = (key, placeholder = "", type = "text") => (
     <input type={type} placeholder={placeholder} value={form[key]}
       onChange={(e) => set(key, e.target.value)} style={{ width: "100%" }} />
@@ -513,7 +536,7 @@ export default function UserManagement() {
             {/* ================= TABLE ================= */}
             <div className="card">
 
-              <div className="top-filters" style={{ alignItems: "center" }}>
+              <div className="top-filters" style={{ alignItems: "center", flexWrap: "wrap" }}>
                 <input
                   className="search-box"
                   placeholder="Search name, roll no or emp id..."
@@ -524,6 +547,16 @@ export default function UserManagement() {
                 <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
                   <option value="all">All Roles</option>
                   {MAIN_ROLES.map((r) => (<option key={r.value} value={r.value}>{r.label}</option>))}
+                </select>
+
+                <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
+                  <option value="all">All Departments</option>
+                  {departments.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                </select>
+
+                <select value={semFilter} onChange={(e) => setSemFilter(e.target.value)}>
+                  <option value="all">All Semesters</option>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (<option key={s} value={s}>Semester {s}</option>))}
                 </select>
 
                 <span style={{ marginLeft: "auto", fontSize: "14px", color: "#64748b" }}>
@@ -546,7 +579,7 @@ export default function UserManagement() {
                     {filteredUsers.map((u) => (
                       <tr key={u.id}>
                         <td>
-                          <div>{u.username}</div>
+                          <div>{u.first_name || u.username}</div>
                           <div style={{ fontSize: 12, color: "#94a3b8" }}>{u.email}</div>
                         </td>
                         <td>{u.roll_number || u.employee_id || "\u2014"}</td>
@@ -826,26 +859,32 @@ export default function UserManagement() {
 }
 
 // ================= INLINE STYLES =================
+// ================= INLINE STYLES =================
 const lbl = {
-  fontSize: 13,
+  fontSize: 12.5,
   color: "#64748b",
   marginBottom: 6,
+  fontWeight: 500,
 };
 
 const statusActive = {
-  fontSize: 12,
-  padding: "2px 10px",
-  borderRadius: 8,
-  background: "#dcfce7",
-  color: "#166534",
+  fontSize: 11.5,
+  fontWeight: 500,
+  padding: "3px 11px",
+  borderRadius: 999,
+  background: "#ecfdf3",
+  color: "#15803d",
+  display: "inline-block",
 };
 
 const statusInactive = {
-  fontSize: 12,
-  padding: "2px 10px",
-  borderRadius: 8,
+  fontSize: 11.5,
+  fontWeight: 500,
+  padding: "3px 11px",
+  borderRadius: 999,
   background: "#f1f5f9",
   color: "#64748b",
+  display: "inline-block",
 };
 
 const csvBtn = {
@@ -853,17 +892,18 @@ const csvBtn = {
   alignItems: "center",
   gap: 6,
   background: "#ffffff",
-  color: "#334155",
-  border: "1px solid #d8dee9",
-  borderRadius: 10,
-  padding: "10px 18px",
-  fontSize: 13.5,
-  fontWeight: 600,
+  color: "#475569",
+  border: "1px solid #e2e8f0",
+  borderRadius: 9,
+  padding: "10px 16px",
+  fontSize: 14,
+  fontWeight: 500,
   cursor: "pointer",
+  transition: "0.15s",
 };
 
 const activeBtn = {
-  background: "#0f172a",
+  background: "#2848d8",
   color: "#fff",
-  border: "1px solid #0f172a",
+  border: "1px solid #2848d8",
 };

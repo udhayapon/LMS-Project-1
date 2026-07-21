@@ -2,15 +2,29 @@ import { useEffect, useState } from "react";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
 import API from "../../api";
+import "../../App.css";
+
+// ================= DESIGN TOKENS (match App.css) =================
+const BRAND = "#2848d8";
+const INK = "#0f172a";
+const MUTED = "#64748b";
+const LINE = "#e8edf3";
+const HAIR = "#f1f5f9";
 
 const TYPE_COLOR = {
   holiday: { bg: "#fef2f2", text: "#dc2626", dot: "#dc2626", border: "#fecaca" },
-  exam:    { bg: "#fffbeb", text: "#b45309", dot: "#f59e0b", border: "#fde68a" },
-  event:   { bg: "#f0fdf4", text: "#16a34a", dot: "#16a34a", border: "#bbf7d0" },
+  exam:    { bg: "#fff7ed", text: "#b45309", dot: "#f59e0b", border: "#fed7aa" },
+  event:   { bg: "#ecfdf3", text: "#15803d", dot: "#16a34a", border: "#bbf7d0" },
 };
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+// The API may return the type under `event_type` (model/payload field) OR `type`
+// depending on the serializer. Read both so colours are correct either way.
+const getType = (ev) => (ev.event_type || ev.type || "event");
+// Normalise any date value to a YYYY-MM-DD key (handles plain dates AND ISO datetimes).
+const dkey = (x) => String(x || "").slice(0, 10);
 
 export default function Calendar() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -86,8 +100,9 @@ export default function Calendar() {
   };
 
   const inRange = (dayStr, ev) => {
-    const end = ev.end_date || ev.start_date;
-    return dayStr >= ev.start_date && dayStr <= end;
+    const start = dkey(ev.start_date);
+    const end = dkey(ev.end_date || ev.start_date);
+    return dayStr >= start && dayStr <= end;
   };
 
   const prevMonth = () => {
@@ -130,190 +145,182 @@ export default function Calendar() {
         <Sidebar open={open} setOpen={setOpen} />
         <div className="main">
           <div className="content">
-            <div style={{ width: "100%", padding: "8px 4px" }}>
 
-              <div style={{ marginBottom: 18 }}>
-                <h1 style={{ fontSize: 30, fontWeight: 800, margin: 0, color: "#0f172a" }}>Academic Calendar</h1>
-                <p style={{ color: "#64748b", fontSize: 15, marginTop: 4 }}>
-                  {isAdmin ? "Add holidays, exams and events. Choose who each entry is for." : "Holidays, events and exam dates"}
-                </p>
-              </div>
+            {/* ── HEADER ── */}
+            <div className="header-box">
+              <h2>Academic Calendar</h2>
+              <p>
+                {isAdmin ? "Add holidays, exams and events. Choose who each entry is for." : "Holidays, events and exam dates"}
+              </p>
+            </div>
 
-              {/* Legend */}
-              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 13, marginBottom: 18 }}>
-                <Legend color="#dc2626" label="Holiday / Leave" />
-                <Legend color="#f59e0b" label="Exam" />
-                <Legend color="#16a34a" label="Event" />
-              </div>
+            {/* ── LEGEND ── */}
+            <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 13, marginTop: -6 }}>
+              <Legend color="#dc2626" label="Holiday / leave" />
+              <Legend color="#f59e0b" label="Exam" />
+              <Legend color="#16a34a" label="Event" />
+            </div>
 
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: isAdmin ? "minmax(0,300px) minmax(0,1fr)" : "minmax(0,1fr) minmax(0,260px)",
-                gap: 20, alignItems: "start",
-              }}>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: isAdmin ? "minmax(0,300px) minmax(0,1fr)" : "minmax(0,1fr) minmax(0,260px)",
+              gap: 18, alignItems: "start",
+            }}>
 
-                {/* LEFT: admin form (always visible) */}
-                {isAdmin && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                    <div style={cardStyle}>
-                      <h3 style={h3Style}>Add Entry</h3>
+              {/* LEFT: admin form (always visible) */}
+              {isAdmin && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                  <div style={cardStyle}>
+                    <h3 style={h3Style}>Add entry</h3>
 
-                      <Label>Title</Label>
-                      <input style={inputStyle} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Final year farewell" />
+                    <Label>Title</Label>
+                    <input style={inputStyle} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Final year farewell" />
 
-                      <Label>Type</Label>
-                      <select style={inputStyle} value={type} onChange={(e) => setType(e.target.value)}>
-                        <option value="event">Event</option>
-                        <option value="holiday">Holiday / Leave</option>
-                      </select>
+                    <Label>Type</Label>
+                    <select style={inputStyle} value={type} onChange={(e) => setType(e.target.value)}>
+                      <option value="event">Event</option>
+                      <option value="holiday">Holiday / leave</option>
+                    </select>
 
-                      <Label>Who is this for?</Label>
-                      <select style={inputStyle} value={audience} onChange={(e) => setAudience(e.target.value)}>
-                        <option value="everyone">Everyone</option>
-                        <option value="teachers">Teachers</option>
-                        <option value="students">Students</option>
-                        <option value="parents">Parents</option>
-                      </select>
+                    <Label>Who is this for?</Label>
+                    <select style={inputStyle} value={audience} onChange={(e) => setAudience(e.target.value)}>
+                      <option value="everyone">Everyone</option>
+                      <option value="teachers">Teachers</option>
+                      <option value="students">Students</option>
+                      <option value="parents">Parents</option>
+                    </select>
 
-                      {showYear && (
-                        <>
-                          <Label>Which year? (blank = all)</Label>
-                          <select style={inputStyle} value={yearNum} onChange={(e) => setYearNum(e.target.value)}>
-                            <option value="">All years</option>
-                            <option value="1">First Year</option>
-                            <option value="2">Second Year</option>
-                            <option value="3">Third Year</option>
-                            <option value="4">Final Year</option>
-                          </select>
-                        </>
-                      )}
+                    {showYear && (
+                      <>
+                        <Label>Which year? (blank = all)</Label>
+                        <select style={inputStyle} value={yearNum} onChange={(e) => setYearNum(e.target.value)}>
+                          <option value="">All years</option>
+                          <option value="1">First year</option>
+                          <option value="2">Second year</option>
+                          <option value="3">Third year</option>
+                          <option value="4">Final year</option>
+                        </select>
+                      </>
+                    )}
 
-                      <Label>Start Date</Label>
-                      <input type="date" style={inputStyle} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                    <Label>Start date</Label>
+                    <input type="date" style={inputStyle} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
 
-                      <Label>End Date (optional)</Label>
-                      <input type="date" style={inputStyle} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-                      <div style={{ fontSize: 12, color: "#64748b", marginTop: 6, lineHeight: 1.5 }}>
-                        Leave the end date blank for a single-day entry.
-                      </div>
-
-                      <button onClick={addEvent} style={btnStyle}>Add &amp; Notify</button>
+                    <Label>End date (optional)</Label>
+                    <input type="date" style={inputStyle} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                    <div style={{ fontSize: 12.5, color: MUTED, marginTop: 6, lineHeight: 1.5 }}>
+                      Leave the end date blank for a single-day entry.
                     </div>
 
-                    <div style={cardStyle}>
-                      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: "#0f172a" }}>This Month's Entries</div>
-                      {monthEvents.length === 0 ? (
-                        <div style={{ color: "#94a3b8", fontSize: 13 }}>No entries this month.</div>
-                      ) : monthEvents.map((ev) => (
-                        <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid #f1f5f9", fontSize: 14 }}>
-                          <span style={{ width: 9, height: 9, borderRadius: "50%", background: (TYPE_COLOR[ev.type] || {}).dot, flexShrink: 0 }} />
-                          <span style={{ flex: 1 }}>
-                            {ev.title}
-                            {ev.audience && (
-                              <span style={{ fontSize: 11, color: "#94a3b8" }}>
-                                {" · "}{audienceText(ev.audience)}
-                              </span>
-                            )}
-                          </span>
-                          {typeof ev.id === "string" && ev.id.startsWith("event-") && (
-                            <button onClick={() => deleteEvent(ev.id)} style={{ background: "none", border: "none", color: "#cbd5e1", cursor: "pointer", fontSize: 13 }}>Delete</button>
+                    <button className="btn-primary" onClick={addEvent} style={{ width: "100%", marginTop: 16, padding: "11px 16px" }}>
+                      Add &amp; notify
+                    </button>
+                  </div>
+
+                  <div style={cardStyle}>
+                    <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: INK }}>This month's entries</div>
+                    {monthEvents.length === 0 ? (
+                      <div style={{ color: "#94a3b8", fontSize: 13.5 }}>No entries this month.</div>
+                    ) : monthEvents.map((ev) => (
+                      <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${HAIR}`, fontSize: 13.5 }}>
+                        <span style={{ width: 9, height: 9, borderRadius: "50%", background: (TYPE_COLOR[getType(ev)] || {}).dot, flexShrink: 0 }} />
+                        <span style={{ flex: 1 }}>
+                          {ev.title}
+                          {ev.audience && (
+                            <span style={{ fontSize: 11.5, color: "#94a3b8" }}>
+                              {" · "}{audienceText(ev.audience)}
+                            </span>
                           )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* CALENDAR */}
-                <div style={cardStyle}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-                    <button onClick={prevMonth} style={navIcon} aria-label="Previous month">‹</button>
-                    <h3 style={{ fontSize: 19, fontWeight: 700, margin: 0, color: "#0f172a" }}>{MONTHS[viewMonth]} {viewYear}</h3>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={goToday} style={{ ...navBtn, background: "#2563eb", color: "#fff", borderColor: "#2563eb", fontWeight: 600 }}>Today</button>
-                      <button onClick={nextMonth} style={navIcon} aria-label="Next month">›</button>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 8, marginBottom: 8 }}>
-                    {DAYS.map((d) => (
-                      <div key={d} style={{ textAlign: "center", fontSize: 11, color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>{d}</div>
+                        </span>
+                        {typeof ev.id === "string" && ev.id.startsWith("event-") && (
+                          <button className="btn-delete" onClick={() => deleteEvent(ev.id)}>Delete</button>
+                        )}
+                      </div>
                     ))}
                   </div>
+                </div>
+              )}
 
-                  {loading ? (
-                    <div style={{ padding: 48, textAlign: "center", color: "#94a3b8" }}>Loading…</div>
-                  ) : (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 8 }}>
-                      {cells.map((n, idx) => {
-                        if (n === null) return <div key={"e" + idx} />;
-                        const dayStr = `${viewYear}-${pad(viewMonth + 1)}-${pad(n)}`;
-                        const dayEvents = events.filter((ev) => inRange(dayStr, ev));
-                        const isToday = dayStr === todayStr;
-                        const isSunday = new Date(viewYear, viewMonth, n).getDay() === 0;
-                        return (
-                          <div key={dayStr} style={{
-                            minHeight: 88,
-                            border: isToday ? "1.5px solid #2563eb" : "1px solid #eef2f7",
-                            borderRadius: 10,
-                            padding: 7,
-                            background: isToday ? "#eff6ff" : (isSunday ? "#fef2f2" : "#fff"),
-                          }}>
-                            <div style={{
-                              fontWeight: 700, fontSize: 13,
-                              color: isToday ? "#2563eb" : (isSunday ? "#dc2626" : "#334155"),
-                              display: "inline-flex", justifyContent: "center", alignItems: "center",
-                              minWidth: isToday ? 22 : "auto", height: isToday ? 22 : "auto",
-                              borderRadius: isToday ? "50%" : 0,
-                              background: isToday ? "#dbeafe" : "transparent",
-                            }}>{n}</div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 4 }}>
-                              {isSunday && (
-                                <div style={{
-                                  fontSize: 10.5, padding: "2px 6px", borderRadius: 5,
-                                  background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca",
-                                  fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                                }}>
-                                  Holiday
-                                </div>
-                              )}
-                              {dayEvents.map((ev) => {
-                                const c = TYPE_COLOR[ev.type] || TYPE_COLOR.event;
-                                return (
-                                  <div key={ev.id} title={ev.title} style={{
-                                    fontSize: 10.5, padding: "2px 6px", borderRadius: 5,
-                                    background: c.bg, color: c.text, border: `1px solid ${c.border}`,
-                                    fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                                  }}>
-                                    {ev.title}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+              {/* CALENDAR */}
+              <div style={cardStyle}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+                  <button onClick={prevMonth} style={navIcon} aria-label="Previous month">‹</button>
+                  <h3 style={{ fontSize: 17, fontWeight: 600, margin: 0, color: INK }}>{MONTHS[viewMonth]} {viewYear}</h3>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="btn-primary" onClick={goToday} style={{ padding: "7px 16px", fontSize: 13 }}>Today</button>
+                    <button onClick={nextMonth} style={navIcon} aria-label="Next month">›</button>
+                  </div>
                 </div>
 
-                {/* RIGHT: upcoming (non-admin only) */}
-                {!isAdmin && (
-                  <div style={cardStyle}>
-                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: "#0f172a" }}>Upcoming</div>
-                    {events.length === 0 ? (
-                      <div style={{ color: "#94a3b8", fontSize: 13 }}>Nothing scheduled.</div>
-                    ) : events.slice(0, 8).map((ev) => (
-                      <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}>
-                        <span style={{ width: 9, height: 9, borderRadius: "50%", background: (TYPE_COLOR[ev.type] || {}).dot, flexShrink: 0 }} />
-                        <span style={{ flex: 1 }}>{ev.title}</span>
-                        <span style={{ color: "#94a3b8", fontSize: 12, fontWeight: 600 }}>{ev.start_date.slice(8, 10)}/{ev.start_date.slice(5, 7)}</span>
-                      </div>
-                    ))}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 8, marginBottom: 8 }}>
+                  {DAYS.map((d) => (
+                    <div key={d} style={{ textAlign: "center", fontSize: 12, color: MUTED, fontWeight: 600, textTransform: "none", letterSpacing: 0 }}>{d}</div>
+                  ))}
+                </div>
+
+                {loading ? (
+                  <div style={{ padding: 48, textAlign: "center", color: "#94a3b8" }}>Loading…</div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 8 }}>
+                    {cells.map((n, idx) => {
+                      if (n === null) return <div key={"e" + idx} />;
+                      const dayStr = `${viewYear}-${pad(viewMonth + 1)}-${pad(n)}`;
+                      const dayEvents = events.filter((ev) => inRange(dayStr, ev));
+                      const isToday = dayStr === todayStr;
+                      const isSunday = new Date(viewYear, viewMonth, n).getDay() === 0;
+                      return (
+                        <div key={dayStr} style={{
+                          minHeight: 88,
+                          border: isToday ? `1.5px solid ${BRAND}` : `1px solid ${LINE}`,
+                          borderRadius: 10,
+                          padding: 7,
+                          background: isToday ? "#eef2ff" : (isSunday ? "#f8fafc" : "#fff"),
+                        }}>
+                          <div style={{
+                            fontWeight: 600, fontSize: 13,
+                            color: isToday ? BRAND : (isSunday ? "#94a3b8" : "#334155"),
+                            display: "inline-flex", justifyContent: "center", alignItems: "center",
+                            minWidth: isToday ? 22 : "auto", height: isToday ? 22 : "auto",
+                            borderRadius: isToday ? "50%" : 0,
+                            background: isToday ? "#dbe3ff" : "transparent",
+                          }}>{n}</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 4 }}>
+                            {dayEvents.map((ev) => {
+                              const c = TYPE_COLOR[getType(ev)] || TYPE_COLOR.event;
+                              return (
+                                <div key={ev.id} title={ev.title} style={{
+                                  fontSize: 10.5, padding: "2px 6px", borderRadius: 6,
+                                  background: c.bg, color: c.text, border: `1px solid ${c.border}`,
+                                  fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                }}>
+                                  {ev.title}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-
               </div>
+
+              {/* RIGHT: upcoming (non-admin only) */}
+              {!isAdmin && (
+                <div style={cardStyle}>
+                  <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: INK }}>Upcoming</div>
+                  {events.length === 0 ? (
+                    <div style={{ color: "#94a3b8", fontSize: 13.5 }}>Nothing scheduled.</div>
+                  ) : events.slice(0, 8).map((ev) => (
+                    <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: `1px solid ${HAIR}`, fontSize: 13.5 }}>
+                      <span style={{ width: 9, height: 9, borderRadius: "50%", background: (TYPE_COLOR[getType(ev)] || {}).dot, flexShrink: 0 }} />
+                      <span style={{ flex: 1 }}>{ev.title}</span>
+                      <span style={{ color: "#94a3b8", fontSize: 12, fontWeight: 500 }}>{dkey(ev.start_date).slice(8, 10)}/{dkey(ev.start_date).slice(5, 7)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
             </div>
           </div>
         </div>
@@ -332,12 +339,10 @@ function Legend({ color, label }) {
 }
 
 function Label({ children }) {
-  return <div style={{ fontSize: 13, color: "#64748b", marginBottom: 5, marginTop: 12, fontWeight: 500 }}>{children}</div>;
+  return <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 6, marginTop: 12, fontWeight: 500 }}>{children}</div>;
 }
 
-const cardStyle = { background: "#fff", border: "1px solid #eef2f7", borderRadius: 16, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" };
-const h3Style = { fontSize: 17, fontWeight: 700, marginBottom: 16, color: "#0f172a" };
-const inputStyle = { width: "100%", border: "1px solid #e2e8f0", borderRadius: 10, padding: "11px 12px", fontSize: 14, background: "#f8fafc", outline: "none", fontFamily: "inherit", boxSizing: "border-box" };
-const btnStyle = { width: "100%", background: "#2563eb", color: "#fff", border: "none", borderRadius: 10, padding: 13, fontSize: 15, fontWeight: 600, cursor: "pointer", marginTop: 16 };
-const navBtn = { border: "1px solid #e2e8f0", background: "#fff", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 13, color: "#334155" };
-const navIcon = { border: "1px solid #e2e8f0", background: "#fff", borderRadius: 8, padding: "5px 15px", cursor: "pointer", fontSize: 18, fontWeight: 700, color: "#334155", lineHeight: 1 };
+const cardStyle = { background: "#fff", border: `1px solid ${LINE}`, borderRadius: 14, padding: 22, boxShadow: "0 1px 3px rgba(16,24,40,0.04)" };
+const h3Style = { fontSize: 17, fontWeight: 600, marginBottom: 15, color: INK };
+const inputStyle = { width: "100%", border: "1px solid #e2e8f0", borderRadius: 9, padding: "10px 12px", fontSize: 14, background: "#fff", outline: "none", fontFamily: "inherit", boxSizing: "border-box", color: "#1e293b" };
+const navIcon = { border: "1px solid #e2e8f0", background: "#fff", borderRadius: 9, padding: "5px 15px", cursor: "pointer", fontSize: 18, fontWeight: 600, color: "#334155", lineHeight: 1 };

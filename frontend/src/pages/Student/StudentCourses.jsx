@@ -12,6 +12,9 @@ export default function StudentCourses() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // which semester's subjects to show ("" = not set yet)
+  const [semFilter, setSemFilter] = useState("");
+
   useEffect(() => { fetchCourses(); }, []);
 
   const fetchCourses = async () => {
@@ -19,13 +22,47 @@ export default function StudentCourses() {
       setLoading(true);
       const res = await API.get("/enrollments/");
       const enrollments = res.data?.results || res.data || [];
-      setCourses(enrollments.filter((e) => (e.student?.id || e.student) === user.id));
+
+      // this student's enrollments (all semesters — kept as history)
+      const mine = enrollments.filter(
+        (e) => (e.student?.id || e.student) === user.id
+      );
+      setCourses(mine);
+
+      // default the filter to the student's current semester, if they have
+      // subjects there; otherwise fall back to their latest semester with data
+      const sems = [
+        ...new Set(
+          mine.map((e) => Number(e.semester)).filter((n) => !Number.isNaN(n))
+        ),
+      ].sort((a, b) => a - b);
+
+      const current = Number(user.semester);
+      if (sems.includes(current)) {
+        setSemFilter(String(current));
+      } else if (sems.length) {
+        setSemFilter(String(sems[sems.length - 1])); // latest available
+      } else {
+        setSemFilter("");
+      }
     } catch (err) {
       console.log("Error fetching courses:", err);
     } finally {
       setLoading(false);
     }
   };
+
+  // semesters this student actually has subjects in (for the dropdown)
+  const availableSemesters = [
+    ...new Set(
+      courses.map((c) => Number(c.semester)).filter((n) => !Number.isNaN(n))
+    ),
+  ].sort((a, b) => a - b);
+
+  // rows to show = the selected semester (or all, if somehow unset)
+  const visibleCourses = semFilter
+    ? courses.filter((c) => Number(c.semester) === Number(semFilter))
+    : courses;
 
   // the student's course id (all enrolled subjects share the same course)
   const courseId = courses[0]?.course_id;
@@ -47,6 +84,29 @@ export default function StudentCourses() {
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+
+                  {/* Semester filter */}
+                  {!loading && availableSemesters.length > 0 && (
+                    <select
+                      value={semFilter}
+                      onChange={(e) => setSemFilter(e.target.value)}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: "10px",
+                        border: "1px solid #e2e8f0",
+                        background: "#f8fafc",
+                        fontSize: "14px",
+                      }}
+                    >
+                      {availableSemesters.map((s) => (
+                        <option key={s} value={s}>
+                          Semester {s}
+                          {Number(s) === Number(user.semester) ? " (current)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
                   {!loading && courseId && (
                     <button
                       className="courses-open-btn"
@@ -57,7 +117,7 @@ export default function StudentCourses() {
                   )}
                   {!loading && (
                     <span className="courses-count">
-                      {courses.length} subject{courses.length !== 1 ? "s" : ""}
+                      {visibleCourses.length} subject{visibleCourses.length !== 1 ? "s" : ""}
                     </span>
                   )}
                 </div>
@@ -70,9 +130,9 @@ export default function StudentCourses() {
                   <p>Loading subjects…</p>
                 </div>
 
-              ) : courses.length === 0 ? (
+              ) : visibleCourses.length === 0 ? (
                 <div className="courses-empty">
-                  <p>No enrolled subjects found.</p>
+                  <p>No subjects found for this semester.</p>
                 </div>
 
               ) : (
@@ -88,7 +148,7 @@ export default function StudentCourses() {
                       </tr>
                     </thead>
                     <tbody>
-                      {courses.map((c) => (
+                      {visibleCourses.map((c) => (
                         <tr key={c.id}>
                           <td>{c.course_name}</td>
                           <td className="courses-td-subject">{c.subject_name}</td>

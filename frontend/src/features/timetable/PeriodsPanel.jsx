@@ -9,6 +9,11 @@ export default function PeriodsPanel({ onChanged }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // ---- semester (start / end of the term) ----
+  const [sem, setSem] = useState({ name: "", start_date: "", end_date: "" });
+  const [semMsg, setSemMsg] = useState("");
+  const [semSaving, setSemSaving] = useState(false);
+
   // add form
   const [form, setForm] = useState({
     type: "class",
@@ -41,9 +46,54 @@ export default function PeriodsPanel({ onChanged }) {
     }
   };
 
+  const fetchSemester = async () => {
+    try {
+      const s = await API.get("/semester/");
+      const active = (s.data || [])[0];
+      if (active) {
+        setSem({
+          name: active.name || "",
+          start_date: active.start_date || "",
+          end_date: active.end_date || "",
+        });
+      }
+    } catch (err) {
+      console.error("Load semester error:", err);
+    }
+  };
+
   useEffect(() => {
+    fetchSemester();
     fetchSlots();
   }, []);
+
+  const saveSemester = async () => {
+    setSemMsg("");
+    if (!sem.name || !sem.start_date || !sem.end_date) {
+      setSemMsg("Please fill the name, start date and end date.");
+      return;
+    }
+    setSemSaving(true);
+    try {
+      await API.post("/semester/", sem);
+      alert("Semester saved");
+    } catch (err) {
+      const data = err?.response?.data;
+      // surface whatever the backend actually returned
+      let msg = "Could not save the semester.";
+      if (data) {
+        if (typeof data === "string") msg = data;
+        else if (data.detail) msg = data.detail;
+        else if (data.start_date) msg = "Start date: " + data.start_date[0];
+        else if (data.end_date) msg = "End date: " + data.end_date[0];
+        else if (data.name) msg = "Name: " + data.name[0];
+        else msg = JSON.stringify(data);
+      }
+      setSemMsg(msg);
+    } finally {
+      setSemSaving(false);
+    }
+  };
 
   const addSlot = async () => {
     setError("");
@@ -139,6 +189,51 @@ export default function PeriodsPanel({ onChanged }) {
 
   return (
     <div>
+      {/* SEMESTER (term start / end) */}
+      <div className="tb-card">
+        <h3 className="tb-card-title">Semester</h3>
+
+        <div className="tb-form">
+          <label className="tb-field">
+            <span>Name</span>
+            <input
+              value={sem.name}
+              placeholder="e.g. Even Semester 2026"
+              onChange={(e) => setSem({ ...sem, name: e.target.value })}
+              style={{ minWidth: "220px" }}
+            />
+          </label>
+
+          <label className="tb-field">
+            <span>Start date</span>
+            <input
+              type="date"
+              value={sem.start_date}
+              onChange={(e) => setSem({ ...sem, start_date: e.target.value })}
+            />
+          </label>
+
+          <label className="tb-field">
+            <span>End date</span>
+            <input
+              type="date"
+              value={sem.end_date}
+              onChange={(e) => setSem({ ...sem, end_date: e.target.value })}
+            />
+          </label>
+
+          <button className="tb-btn" onClick={saveSemester} disabled={semSaving}>
+            {semSaving ? "Saving…" : "Save"}
+          </button>
+        </div>
+
+        {semMsg && <div className="tb-error">{semMsg}</div>}
+        <p className="tb-hint">
+          The teaching-plan and exam schedules run between these dates. Add holidays in the
+          Calendar page — they are read from there automatically.
+        </p>
+      </div>
+
       {/* ADD */}
       <div className="tb-card">
         <h3 className="tb-card-title">Add a period</h3>

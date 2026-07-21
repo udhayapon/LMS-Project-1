@@ -9,6 +9,7 @@ import API from "../../api";
 import "../../App.css";
 
 // ================= STUDENT FEATURES =================
+import TeachingPlanStudent from "../../features/teachingplan/StudentTeachingPlan";
 import LectureStudent from "../../features/lectures/LectureStudent";
 import AssignmentStudent from "../../features/assignments/AssignmentStudent";
 import QuizStudent from "../../features/quiz/QuizStudent";
@@ -27,7 +28,7 @@ export default function StudentSubjectDetails() {
     useState(null);
 
   const [activeTab, setActiveTab] =
-    useState("lectures");
+    useState("teachingplan");
 
   const [loading, setLoading] =
     useState(true);
@@ -123,6 +124,22 @@ export default function StudentSubjectDetails() {
             {/* ================= TABS ================= */}
             <div className="tabs">
 
+              {/* TEACHING PLAN */}
+              <button
+                className={
+                  activeTab === "teachingplan"
+                    ? "btn-primary"
+                    : ""
+                }
+                onClick={() =>
+                  setActiveTab(
+                    "teachingplan"
+                  )
+                }
+              >
+                Teaching Plan
+              </button>
+
               {/* LECTURES */}
               <button
                 className={
@@ -202,6 +219,15 @@ export default function StudentSubjectDetails() {
             </div>
 
             {/* ================= CONTENT ================= */}
+
+            {/* TEACHING PLAN */}
+            {activeTab === "teachingplan" && (
+
+              <TeachingPlanStudent
+                ta={ta}
+              />
+
+            )}
 
             {/* LECTURES */}
             {activeTab === "lectures" && (

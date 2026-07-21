@@ -18,87 +18,41 @@ export default function CourseDetails() {
     localStorage.getItem("user") || "{}"
   );
 
-  const [open, setOpen] =
-    useState(false);
-
-  const [course, setCourse] =
-    useState(null);
-
-  const [years, setYears] =
-    useState([]);
-
-  const [students, setStudents] =
-    useState([]);
-
-  const [year, setYear] =
-    useState("");
-
-  const [yearId, setYearId] =
-    useState("");
-
-  const [subject, setSubject] =
-    useState("");
-
-  const [code, setCode] =
-    useState("");
-
-  const [semester, setSemester] =
-    useState("");
-
-  const [credits, setCredits] =
-    useState("");
+  const [open, setOpen] = useState(false);
+  const [course, setCourse] = useState(null);
+  const [years, setYears] = useState([]);
+  const [year, setYear] = useState("");
+  const [yearId, setYearId] = useState("");
+  const [subject, setSubject] = useState("");
+  const [code, setCode] = useState("");
+  const [semester, setSemester] = useState("");
+  const [credits, setCredits] = useState("");
+  const [weeklyHours, setWeeklyHours] = useState("");
+  const [isElective, setIsElective] = useState(false);
+  const [department, setDepartment] = useState("");
+  const [departments, setDepartments] = useState([]);
 
   // ================= EDIT SUBJECT =================
-  const [
-    editingSubjectId,
-    setEditingSubjectId
-  ] = useState(null);
-
-  const [activeTab, setActiveTab] =
-    useState("structure");
+  const [editingSubjectId, setEditingSubjectId] = useState(null);
 
   // full-page loader: first load only
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
 
   // button-level busy flag (no page-wide spinner)
-  const [saving, setSaving] =
-    useState(false);
-
-  // lazy enrollments for the Students tab
-  const [
-    studentsLoaded,
-    setStudentsLoaded
-  ] = useState(false);
-
-  const [
-    loadingStudents,
-    setLoadingStudents
-  ] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // ================= INIT (course + years only) =================
   useEffect(() => {
 
-    if (id) {
-
-      loadCourseAndYears();
-    }
-
+    if (id) { loadCourseAndYears(); }
   }, [id]);
 
-  // ================= LAZY: load students only when tab opened =================
+  // ================= LOAD DEPARTMENTS (for the subject dropdown) =================
   useEffect(() => {
-
-    if (
-      activeTab === "students" &&
-      !studentsLoaded &&
-      course
-    ) {
-
-      loadStudents();
-    }
-
-  }, [activeTab, studentsLoaded, course]);
+    API.get("/users/departments/")
+      .then((res) => setDepartments(res.data?.results || res.data || []))
+      .catch((err) => console.log("departments error:", err));
+  }, []);
 
   // ================= LOAD COURSE + YEARS =================
   const loadCourseAndYears = async () => {
@@ -136,45 +90,35 @@ export default function CourseDetails() {
     }
   };
 
-  // ================= LOAD STUDENTS (enrollments) =================
-  const loadStudents = async () => {
+  // ================= SEMESTER -> YEAR DERIVATION =================
+  // A semester fully determines the year: Sem 1-2 -> Year 1, 3-4 -> Year 2,
+  // 5-6 -> Year 3, 7-8 -> Year 4. So the user picks the SEMESTER and the year
+  // is computed automatically. This makes an impossible combo (e.g. Year 2 +
+  // Semester 2) impossible to enter - which is what caused mis-filed subjects.
+  const yearNumberForSemester = (sem) =>
+    sem ? Math.ceil(Number(sem) / 2) : null;
 
-    try {
+  // when semester changes, set it AND resolve the matching Year row -> yearId
+  const handleSemesterChange = (value) => {
+    setSemester(value);
 
-      setLoadingStudents(true);
-
-      const s = await API.get(
-        "/enrollments/"
-      );
-
-      const allStudents =
-        s.data?.results ||
-        s.data ||
-        [];
-
-      const filteredStudents =
-        allStudents.filter(
-          (e) =>
-            e.course_name ===
-            course?.name
-        );
-
-      setStudents(filteredStudents);
-
-      setStudentsLoaded(true);
-
-    } catch (err) {
-
-      console.error(
-        "Enrollments error:",
-        err
-      );
-
-    } finally {
-
-      setLoadingStudents(false);
+    const yearNum = yearNumberForSemester(value);
+    if (!yearNum) {
+      setYearId("");
+      return;
     }
+
+    const match = years.find(
+      (y) => Number(y.year_number) === yearNum
+    );
+    setYearId(match ? String(match.id) : "");
   };
+
+  // for the label + validation
+  const derivedYearNumber = yearNumberForSemester(semester);
+  const derivedYearExists = derivedYearNumber
+    ? years.some((y) => Number(y.year_number) === derivedYearNumber)
+    : false;
 
   // ================= LOCAL: upsert a subject into years =================
   const upsertSubjectInYears = (subj) => {
@@ -214,210 +158,190 @@ export default function CourseDetails() {
   };
 
   // ================= ADD YEAR =================
-  const handleAddYear =
-    async () => {
+  const handleAddYear = async () => {
 
-      if (!year) {
+    if (!year) {
 
-        return alert(
-          "Select year"
-        );
-      }
+      return alert("Select year");
+    }
 
-      const yearNum =
-        Number(year);
+    const yearNum = Number(year);
 
-      const exists =
-        years.find(
-          (y) =>
-            Number(
-              y.year_number
-            ) === yearNum
-        );
+    const exists = years.find(
+      (y) => Number(y.year_number) === yearNum
+    );
 
-      if (exists) {
+    if (exists) {
 
-        return alert(
-          "Year already exists"
-        );
-      }
+      return alert("Year already exists");
+    }
 
-      try {
+    try {
 
-        setSaving(true);
+      setSaving(true);
 
-        const res = await API.post(
-          "/years/",
+      const res = await API.post(
+        "/years/",
+        {
+          course: Number(id),
+          year_number: yearNum,
+        }
+      );
+
+      // instant: append new year locally, keep order
+      setYears((prev) =>
+        [
+          ...prev,
           {
-            course: Number(id),
-            year_number:
-              yearNum,
-          }
-        );
+            ...res.data,
+            subjects: res.data.subjects || [],
+          },
+        ].sort(
+          (a, b) => a.year_number - b.year_number
+        )
+      );
 
-        // instant: append new year locally, keep order
-        setYears((prev) =>
-          [
-            ...prev,
-            {
-              ...res.data,
-              subjects:
-                res.data.subjects || [],
-            },
-          ].sort(
-            (a, b) =>
-              a.year_number -
-              b.year_number
-          )
-        );
+      setYear("");
 
-        setYear("");
+    } catch (err) {
 
-      } catch (err) {
+      console.error(err.response?.data);
 
-        console.error(
-          err.response?.data
-        );
+      alert("Failed to add year");
 
-        alert(
-          "Failed to add year"
-        );
+    } finally {
 
-      } finally {
-
-        setSaving(false);
-      }
-    };
+      setSaving(false);
+    }
+  };
 
   // ================= ADD / UPDATE SUBJECT =================
-  const handleAddSubject =
-    async () => {
+  const handleAddSubject = async () => {
 
-      if (
-        !yearId ||
-        !subject ||
-        !semester
-      ) {
+    if (!semester || !subject) {
 
-        return alert(
-          "Select year, semester and enter subject"
+      return alert(
+        "Select semester and enter subject name"
+      );
+    }
+
+    // the year is derived from the semester - make sure it exists
+    if (!derivedYearExists || !yearId) {
+
+      return alert(
+        `Year ${derivedYearNumber} has not been added for this course yet. Add it above first.`
+      );
+    }
+
+    const payload = {
+      name: subject,
+      code: code,
+      year: Number(yearId),
+      semester: Number(semester),
+      credits: Number(credits) || 0,
+      weekly_hours: Number(weeklyHours) || 0,
+      is_elective: isElective,
+      department: department ? Number(department) : null,
+    };
+
+    try {
+
+      setSaving(true);
+
+      let res;
+
+      if (editingSubjectId) {
+
+        res = await API.put(
+          `/subjects/${editingSubjectId}/`,
+          payload
+        );
+
+      } else {
+
+        res = await API.post(
+          "/subjects/",
+          payload
         );
       }
 
-      const payload = {
-        name: subject,
-        code: code,
-        year: Number(yearId),
-        semester: Number(semester),
-        credits: Number(credits) || 0,
-      };
+      // instant: update the list from server response
+      upsertSubjectInYears(res.data);
 
-      try {
+      // ================= RESET =================
+      setSubject("");
+      setCode("");
+      setYearId("");
+      setSemester("");
+      setCredits("");
+      setWeeklyHours("");
+      setIsElective(false);
+      setDepartment("");
 
-        setSaving(true);
+      setEditingSubjectId(null);
 
-        let res;
+    } catch (err) {
 
-        if (editingSubjectId) {
+      console.error(err.response?.data);
 
-          res = await API.put(
-            `/subjects/${editingSubjectId}/`,
-            payload
-          );
+      alert("Failed to save subject");
 
-        } else {
+    } finally {
 
-          res = await API.post(
-            "/subjects/",
-            payload
-          );
-        }
+      setSaving(false);
+    }
+  };
 
-        // instant: update the list from server response
-        upsertSubjectInYears(res.data);
+  // ================= DELETE SUBJECT =================
+  const handleDeleteSubject = async (subjectId) => {
 
-        // ================= RESET =================
+    if (!window.confirm("Delete this subject?")) {
+      return;
+    }
+
+    try {
+
+      setSaving(true);
+
+      await API.delete(
+        `/subjects/${subjectId}/`
+      );
+
+      // instant: drop it from local state
+      setYears((prev) =>
+        prev.map((y) => ({
+          ...y,
+          subjects: (y.subjects || []).filter(
+            (s) => s.id !== subjectId
+          ),
+        }))
+      );
+
+      // if we were editing this one, clear the form
+      if (editingSubjectId === subjectId) {
+
         setSubject("");
         setCode("");
         setYearId("");
         setSemester("");
         setCredits("");
-
+        setWeeklyHours("");
+        setIsElective(false);
+        setDepartment("");
         setEditingSubjectId(null);
-
-      } catch (err) {
-
-        console.error(
-          err.response?.data
-        );
-
-        alert(
-          "Failed to save subject"
-        );
-
-      } finally {
-
-        setSaving(false);
-      }
-    };
-
-  // ================= DELETE SUBJECT =================
-  const handleDeleteSubject =
-    async (subjectId) => {
-
-      if (
-        !window.confirm(
-          "Delete this subject?"
-        )
-      ) {
-        return;
       }
 
-      try {
+    } catch (err) {
 
-        setSaving(true);
+      console.error(err);
 
-        await API.delete(
-          `/subjects/${subjectId}/`
-        );
+      alert("Delete failed");
 
-        // instant: drop it from local state
-        setYears((prev) =>
-          prev.map((y) => ({
-            ...y,
-            subjects: (y.subjects || []).filter(
-              (s) => s.id !== subjectId
-            ),
-          }))
-        );
+    } finally {
 
-        // if we were editing this one, clear the form
-        if (
-          editingSubjectId ===
-          subjectId
-        ) {
-
-          setSubject("");
-          setCode("");
-          setYearId("");
-          setSemester("");
-          setCredits("");
-          setEditingSubjectId(null);
-        }
-
-      } catch (err) {
-
-        console.error(err);
-
-        alert(
-          "Delete failed"
-        );
-
-      } finally {
-
-        setSaving(false);
-      }
-    };
+      setSaving(false);
+    }
+  };
 
   // ================= LOADING (first load only) =================
   if (loading) {
@@ -461,26 +385,40 @@ export default function CourseDetails() {
             {/* ================= HEADER ================= */}
             <div className="header-box">
 
-              <button
-                className="btn-primary"
-                onClick={() =>
-                  navigate("/courses")
-                }
+              {/* top row: subtle back link (left) + primary action (right) */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "18px",
+                }}
               >
-                ← Back
-              </button>
 
-              <button
-                className="btn-primary"
-                style={{ marginLeft: "10px" }}
-                onClick={() =>
-                  navigate(
-                    `/courses/${id}/structure`
-                  )
-                }
-              >
-                View Structure
-              </button>
+                <button
+                  onClick={() => navigate("/courses")}
+                  style={{
+                    background: "transparent",
+                    color: "#64748b",
+                    padding: "6px 2px",
+                    fontWeight: 600,
+                  }}
+                >
+                  &larr; Back to Courses
+                </button>
+
+                <button
+                  className="btn-primary"
+                  onClick={() =>
+                    navigate(
+                      `/courses/${id}/structure`
+                    )
+                  }
+                >
+                  Course Structure
+                </button>
+
+              </div>
 
               <h2>
                 {course.name}
@@ -492,66 +430,22 @@ export default function CourseDetails() {
 
             </div>
 
-            {/* ================= TABS ================= */}
-            <div className="tabs">
-
-              <button
-                className={
-                  activeTab ===
-                  "structure"
-                    ? "btn-primary"
-                    : ""
-                }
-                onClick={() =>
-                  setActiveTab(
-                    "structure"
-                  )
-                }
-              >
-                Structure
-              </button>
-
-              <button
-                className={
-                  activeTab ===
-                  "students"
-                    ? "btn-primary"
-                    : ""
-                }
-                onClick={() =>
-                  setActiveTab(
-                    "students"
-                  )
-                }
-              >
-                Students
-              </button>
-
-            </div>
-
-            {/* ================= STRUCTURE TAB ================= */}
-            {activeTab ===
-              "structure" &&
-              user.role ===
-                "admin" && (
+            {/* ================= STRUCTURE (admin only) ================= */}
+            {user.role === "admin" && (
 
               <>
 
                 {/* ================= ADD YEAR ================= */}
                 <div className="card">
 
-                  <h3>
-                    Add Year
-                  </h3>
+                  <h3>Add Year </h3>
 
-                  <div className="form-grid">
+                  <div className="form-grid form-grid--row">
 
                     <select
                       value={year}
                       onChange={(e) =>
-                        setYear(
-                          e.target.value
-                        )
+                        setYear(e.target.value)
                       }
                     >
 
@@ -559,31 +453,24 @@ export default function CourseDetails() {
                         Select Year
                       </option>
 
-                      {[1, 2, 3, 4].map(
-                        (y) => (
-                          <option
-                            key={y}
-                            value={y}
-                            disabled={years.some(
-                              (
-                                yr
-                              ) =>
-                                yr.year_number ===
-                                y
-                            )}
-                          >
-                            Year {y}
-                          </option>
-                        )
-                      )}
+                      {[1, 2, 3, 4].map((y) => (
+                        <option
+                          key={y}
+                          value={y}
+                          disabled={years.some(
+                            (yr) =>
+                              yr.year_number === y
+                          )}
+                        >
+                          Year {y}
+                        </option>
+                      ))}
 
                     </select>
 
                     <button
                       className="btn-primary"
-                      onClick={
-                        handleAddYear
-                      }
+                      onClick={handleAddYear}
                       disabled={saving}
                     >
                       {saving
@@ -599,52 +486,18 @@ export default function CourseDetails() {
                 <div className="card">
 
                   <h3>
-
                     {editingSubjectId
                       ? "Edit Subject"
                       : "Add Subject"}
-
                   </h3>
 
                   <div className="form-grid form-grid--row">
 
-                    {/* YEAR */}
-                    <select
-                      value={yearId}
-                      onChange={(e) =>
-                        setYearId(
-                          e.target.value
-                        )
-                      }
-                    >
-
-                      <option value="">
-                        Select Year
-                      </option>
-
-                      {years.map(
-                        (y) => (
-                          <option
-                            key={y.id}
-                            value={y.id}
-                          >
-                            Year{" "}
-                            {
-                              y.year_number
-                            }
-                          </option>
-                        )
-                      )}
-
-                    </select>
-
-                    {/* SEMESTER */}
+                    {/* SEMESTER (the year is derived from this) */}
                     <select
                       value={semester}
                       onChange={(e) =>
-                        setSemester(
-                          e.target.value
-                        )
+                        handleSemesterChange(e.target.value)
                       }
                     >
 
@@ -663,14 +516,52 @@ export default function CourseDetails() {
 
                     </select>
 
+                    {/* DERIVED YEAR (read-only, auto from semester) */}
+                    <span
+                      className={`sem-year-badge ${
+                        !semester
+                          ? "is-empty"
+                          : derivedYearExists
+                          ? "is-ok"
+                          : "is-warn"
+                      }`}
+                    >
+                      {!semester
+                        ? "Year -"
+                        : derivedYearExists
+                        ? `Year ${derivedYearNumber}`
+                        : `Year ${derivedYearNumber} not added yet`}
+                    </span>
+
+                    {/* DEPARTMENT (owner) */}
+                    <select
+                      value={department}
+                      onChange={(e) =>
+                        setDepartment(e.target.value)
+                      }
+                    >
+
+                      <option value="">
+                        Select Department
+                      </option>
+
+                      {departments.map((d) => (
+                        <option
+                          key={d.id}
+                          value={d.id}
+                        >
+                          {d.name}
+                        </option>
+                      ))}
+
+                    </select>
+
                     {/* CODE */}
                     <input
                       placeholder="Subject Code (e.g. HS3152)"
                       value={code}
                       onChange={(e) =>
-                        setCode(
-                          e.target.value
-                        )
+                        setCode(e.target.value)
                       }
                     />
 
@@ -679,9 +570,7 @@ export default function CourseDetails() {
                       placeholder="Subject Name"
                       value={subject}
                       onChange={(e) =>
-                        setSubject(
-                          e.target.value
-                        )
+                        setSubject(e.target.value)
                       }
                     />
 
@@ -692,38 +581,64 @@ export default function CourseDetails() {
                       placeholder="Credits"
                       value={credits}
                       onChange={(e) =>
-                        setCredits(
-                          e.target.value
-                        )
+                        setCredits(e.target.value)
                       }
                     />
+
+                    {/* WEEKLY PERIODS (timetable target) */}
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Weekly periods"
+                      value={weeklyHours}
+                      onChange={(e) =>
+                        setWeeklyHours(e.target.value)
+                      }
+                    />
+
+                    {/* ELECTIVE (students self-enrol; not auto-enrolled) */}
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        fontSize: "14px",
+                        color: "#334155",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isElective}
+                        onChange={(e) =>
+                          setIsElective(e.target.checked)
+                        }
+                      />
+                      Elective
+                    </label>
 
                     {/* BUTTON */}
                     <button
                       className="btn-primary"
-                      onClick={
-                        handleAddSubject
-                      }
+                      onClick={handleAddSubject}
                       disabled={saving}
                     >
-
                       {saving
                         ? "Saving..."
                         : editingSubjectId
                         ? "Update Subject"
                         : "Add Subject"}
-
                     </button>
 
                   </div>
 
                 </div>
 
-                {/* ================= COURSE STRUCTURE ================= */}
+                {/* ================= SUBJECTS BY YEAR ================= */}
                 <div className="card">
 
                   <h3>
-                    Course Structure
+                    Subjects by Year
                   </h3>
 
                   {years.length === 0 ? (
@@ -738,153 +653,112 @@ export default function CourseDetails() {
 
                       <div
                         key={y.id}
-                        style={{
-                          marginBottom:
-                            "25px",
-                        }}
+                        style={{ marginBottom: "25px" }}
                       >
 
-                        {/* YEAR */}
                         <h4>
-                          Year{" "}
-                          {
-                            y.year_number
-                          }
+                          Year {y.year_number}
                         </h4>
 
-                        {/* SUBJECT TABLE */}
                         <table>
 
                           <thead>
 
                             <tr>
-
-                              <th>
-                                Code
-                              </th>
-
-                              <th>
-                                Subject
-                              </th>
-
-                              <th>
-                                Semester
-                              </th>
-
-                              <th>
-                                Credits
-                              </th>
-
-                              <th>
-                                Action
-                              </th>
-
+                              <th>Code</th>
+                              <th>Subject</th>
+                              <th>Department</th>
+                              <th>Semester</th>
+                              <th>Credits</th>
+                              <th>Weekly periods</th>
+                              <th>Type</th>
+                              <th>Action</th>
                             </tr>
 
                           </thead>
 
                           <tbody>
 
-                            {y.subjects
-                              ?.length > 0 ? (
+                            {y.subjects?.length > 0 ? (
 
-                              y.subjects.map(
-                                (s) => (
+                              y.subjects.map((s) => (
 
-                                  <tr
-                                    key={s.id}
-                                  >
+                                <tr key={s.id}>
 
-                                    {/* CODE */}
-                                    <td>
-                                      {s.code || "—"}
-                                    </td>
+                                  <td>
+                                    {s.code || "-"}
+                                  </td>
 
-                                    {/* SUBJECT */}
-                                    <td>
-                                      {s.name}
-                                    </td>
+                                  <td>
+                                    {s.name}
+                                  </td>
 
-                                    {/* SEMESTER */}
-                                    <td>
-                                      Semester{" "}
-                                      {
-                                        s.semester
-                                      }
-                                    </td>
+                                  <td>
+                                    {s.department_name || "-"}
+                                  </td>
 
-                                    {/* CREDITS */}
-                                    <td>
-                                      {s.credits ?? 0}
-                                    </td>
+                                  <td>
+                                    Semester {s.semester}
+                                  </td>
 
-                                    {/* ACTIONS */}
-                                    <td>
+                                  <td>
+                                    {s.credits ?? 0}
+                                  </td>
 
-                                      <div className="action-buttons">
+                                  <td>
+                                    {s.weekly_hours ?? 0}
+                                  </td>
 
-                                        {/* EDIT */}
-                                        <button
-                                          className="btn-edit"
-                                          onClick={() => {
+                                  <td>
+                                    {s.is_elective ? "Elective" : "Core"}
+                                  </td>
 
-                                            setSubject(
-                                              s.name
-                                            );
+                                  <td>
 
-                                            setCode(
-                                              s.code || ""
-                                            );
+                                    <div className="action-buttons">
 
-                                            setSemester(
-                                              s.semester
-                                            );
+                                      <button
+                                        className="btn-edit"
+                                        onClick={() => {
+                                          setSubject(s.name);
+                                          setCode(s.code || "");
+                                          setSemester(String(s.semester));
+                                          // derive yearId from the semester so
+                                          // edit stays consistent with the rule
+                                          setYearId(String(s.year));
+                                          setCredits(s.credits ?? "");
+                                          setWeeklyHours(s.weekly_hours ?? "");
+                                          setIsElective(!!s.is_elective);
+                                          setDepartment(s.department || "");
+                                          setEditingSubjectId(s.id);
+                                        }}
+                                      >
+                                        Edit
+                                      </button>
 
-                                            setYearId(
-                                              s.year
-                                            );
+                                      <button
+                                        className="btn-delete"
+                                        onClick={() =>
+                                          handleDeleteSubject(s.id)
+                                        }
+                                      >
+                                        Delete
+                                      </button>
 
-                                            setCredits(
-                                              s.credits ?? ""
-                                            );
+                                    </div>
 
-                                            setEditingSubjectId(
-                                              s.id
-                                            );
-                                          }}
-                                        >
-                                          Edit
-                                        </button>
+                                  </td>
 
-                                        {/* DELETE */}
-                                        <button
-                                          className="btn-delete"
-                                          onClick={() =>
-                                            handleDeleteSubject(
-                                              s.id
-                                            )
-                                          }
-                                        >
-                                          Delete
-                                        </button>
+                                </tr>
 
-                                      </div>
-
-                                    </td>
-
-                                  </tr>
-
-                                )
-                              )
+                              ))
 
                             ) : (
 
                               <tr>
-
-                                <td colSpan="5">
+                                <td colSpan="8">
                                   No subjects
                                 </td>
-
                               </tr>
 
                             )}
@@ -902,105 +776,6 @@ export default function CourseDetails() {
                 </div>
 
               </>
-            )}
-
-            {/* ================= STUDENTS TAB ================= */}
-            {activeTab ===
-              "students" && (
-
-              <div className="card">
-
-                <h3>
-                  Students
-                </h3>
-
-                {loadingStudents ? (
-
-                  <p>
-                    Loading students...
-                  </p>
-
-                ) : students.length === 0 ? (
-
-                  <p>
-                    No students enrolled
-                  </p>
-
-                ) : (
-
-                  <table>
-
-                    <thead>
-
-                      <tr>
-
-                        <th>
-                          Student
-                        </th>
-
-                        <th>
-                          Subject
-                        </th>
-
-                        <th>
-                          Year
-                        </th>
-
-                        <th>
-                          Semester
-                        </th>
-
-                      </tr>
-
-                    </thead>
-
-                    <tbody>
-
-                      {students.map(
-                        (s) => (
-
-                          <tr
-                            key={s.id}
-                          >
-
-                            <td>
-                              {
-                                s.student_name
-                              }
-                            </td>
-
-                            <td>
-                              {
-                                s.subject_name
-                              }
-                            </td>
-
-                            <td>
-                              Year{" "}
-                              {
-                                s.year_number
-                              }
-                            </td>
-
-                            <td>
-                              Semester{" "}
-                              {
-                                s.semester
-                              }
-                            </td>
-
-                          </tr>
-
-                        )
-                      )}
-
-                    </tbody>
-
-                  </table>
-
-                )}
-
-              </div>
             )}
 
           </div>

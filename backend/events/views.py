@@ -260,3 +260,99 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         if self.request.user.role not in self.ADMIN_ROLES:
             raise ValidationError("You are not allowed to delete announcements.")
         instance.delete()
+
+# ===================== GOOGLE HOLIDAY SYNC =====================
+import json
+import urllib.request
+import urllib.error
+import urllib.parse
+from datetime import datetime
+from django.conf import settings
+
+INDIA_HOLIDAY_CALENDAR_ID = "en.indian#holiday@group.v.calendar.google.com"
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def sync_holidays(request):
+    """
+    Admin-only. Fetches India's national holidays from Google for a year
+    and stores them as CalendarEvent holiday rows (source='google').
+    Re-running replaces previous Google holidays without touching manual ones.
+    Optional body: {"year": 2026}. Defaults to the current year.
+    """
+    user = request.user
+    is_admin = user.is_staff or getattr(user, "role", "") in ("admin", "principal", "iqac")
+    if not is_admin:
+        return Response({"detail": "Admins only."}, status=403)
+
+    api_key = getattr(settings, "GOOGLE_CALENDAR_API_KEY", "")
+    if not api_key:
+        return Response({"detail": "Google API key is not configured."}, status=500)
+
+    try:
+        year = int(request.data.get("year") or datetime.now().year)
+    except (TypeError, ValueError):
+        return Response({"detail": "Invalid year."}, status=400)
+
+    time_min = f"{year}-01-01T00:00:00Z"
+    time_max = f"{year}-12-31T23:59:59Z"
+
+    calendar_id = urllib.parse.quote(INDIA_HOLIDAY_CALENDAR_ID)
+    params = urllib.parse.urlencode({
+        "key": api_key,
+        "timeMin": time_min,
+        "timeMax": time_max,
+        "singleEvents": "true",
+        "orderBy": "startTime",
+    })
+    url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events?{params}"
+
+    try:
+        with urllib.request.urlopen(url, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="ignore")
+        return Response(
+            {"detail": f"Google API error ({e.code}). Check the key and that Calendar API is enabled.",
+             "google_response": body[:400]},
+            status=502,
+        )
+    except Exception as e:
+        return Response({"detail": f"Could not reach Google: {e}"}, status=502)
+
+    items = data.get("items", [])
+
+    CalendarEvent.objects.filter(
+        source="google",
+        event_type="holiday",
+        start_date__year=year,
+    ).delete()
+
+    created = 0
+    for item in items:
+        title = (item.get("summary") or "").strip()
+        start = item.get("start", {}).get("date")
+        if not title or not start:
+            continue
+        try:
+            start_date = datetime.strptime(start, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+
+        CalendarEvent.objects.create(
+            title=title,
+            event_type="holiday",
+            audience="everyone",
+            source="google",
+            start_date=start_date,
+            description=(item.get("description", "") or "")[:500],
+            created_by=request.user,
+        )
+        created += 1
+
+    return Response({
+        "detail": f"Synced {created} holidays for {year}.",
+        "year": year,
+        "created": created,
+    })

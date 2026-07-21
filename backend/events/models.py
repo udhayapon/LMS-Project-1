@@ -8,8 +8,9 @@ User = get_user_model()
 # ===================== CALENDAR EVENT =====================
 class CalendarEvent(models.Model):
     """
-    A calendar entry created by admin. Can be a holiday, event, or exam
-    marker, targeted at an audience and optionally a specific year.
+    A calendar entry created by admin (or synced from Google). Can be a
+    holiday, event, or exam marker, targeted at an audience and optionally
+    a specific year.
     """
 
     TYPE_CHOICES = [
@@ -25,9 +26,18 @@ class CalendarEvent(models.Model):
         ('parents', 'Parents'),
     ]
 
+    # Where this entry came from. 'manual' = admin typed it in;
+    # 'google' = synced from the Google holiday calendar.
+    # Lets us re-sync Google holidays without touching manual entries.
+    SOURCE_CHOICES = [
+        ('manual', 'Manual'),
+        ('google', 'Google'),
+    ]
+
     title = models.CharField(max_length=200)
     event_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='event')
     audience = models.CharField(max_length=20, choices=AUDIENCE_CHOICES, default='everyone')
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='manual')
     year_number = models.IntegerField(null=True, blank=True)
     start_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)

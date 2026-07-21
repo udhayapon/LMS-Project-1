@@ -30,6 +30,9 @@ export default function TeachingAssignments() {
   // ✅ course filter for the table
   const [courseFilter, setCourseFilter] = useState("all");
 
+  // ✅ enrollment generation state (moved here from the old Enrollments page)
+  const [generating, setGenerating] = useState(false);
+
   // ================= LOAD =================
   useEffect(() => {
     fetchData();
@@ -58,6 +61,34 @@ export default function TeachingAssignments() {
       setAssignments(a.data?.results || a.data || []);
     } catch (err) {
       console.error("Fetch error:", err.response?.data || err);
+    }
+  };
+
+  // ================= GENERATE ENROLLMENTS =================
+  // Same call the old Enrollments page used. After allocating teachers to
+  // subjects, this creates the per-student enrollment rows (skipping students
+  // who are already enrolled). Kept as a page-level bulk action.
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const res = await API.post("/generate-enrollments/");
+
+      // backend returns { message, created }
+      const created = res.data?.created;
+      if (created === 0) {
+        alert("No new enrollments — all students are already enrolled.");
+      } else {
+        alert(`${created ?? "Some"} enrollments generated successfully`);
+      }
+    } catch (err) {
+      console.log(err.response?.data || err);
+      const msg =
+        err.response?.data?.error ||
+        err.response?.data?.detail ||
+        "Enrollment generation failed";
+      alert(msg);
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -189,9 +220,29 @@ export default function TeachingAssignments() {
           <div className="content">
 
             {/* ================= HEADER ================= */}
-            <div className="header-box">
-              <h2>Faculty Allocation</h2>
-              <p>Assign teachers to subjects and semesters</p>
+            <div
+              className="header-box"
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 12,
+              }}
+            >
+              <div>
+                <h2>Faculty Allocation</h2>
+                <p>Assign teachers to subjects and semesters</p>
+              </div>
+
+              {/* GENERATE ENROLLMENTS (moved from the old Enrollments page) */}
+              <button
+                className="btn-primary"
+                onClick={handleGenerate}
+                disabled={generating}
+              >
+                {generating ? "Generating..." : "Generate Enrollments"}
+              </button>
             </div>
 
             {/* ================= FORM ================= */}

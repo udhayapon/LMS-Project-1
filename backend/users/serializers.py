@@ -24,8 +24,6 @@ class DepartmentSerializer(serializers.ModelSerializer):
 
 
 # ================= PROFILE SERIALIZERS =================
-# Small serializers for the detail tables. Used for reading a user's
-# profile back and (via UserSerializer) for saving one.
 
 class StudentProfileSerializer(serializers.ModelSerializer):
     class Meta:
@@ -74,6 +72,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'username',
+            'first_name',
             'password',
             'email',
             'role',
@@ -108,9 +107,25 @@ class UserSerializer(serializers.ModelSerializer):
         return ""
 
     # ================= PROFILE READ =================
+    # ================= PROFILE READ =================
     def get_profile_data(self, obj):
         if obj.role == 'student' and hasattr(obj, 'student_profile'):
-            return StudentProfileSerializer(obj.student_profile).data
+            data = StudentProfileSerializer(obj.student_profile).data
+
+            # guardian details live on the linked parent, not the student -
+            # merge them back so the Edit form (Step 4) can pre-fill.
+            # ParentProfile.children has related_name='parents', so the
+            # reverse accessor from a student returns ParentProfile objects.
+            parent_profile = obj.parents.first()
+            if parent_profile:
+                parent_user = parent_profile.user
+                data['guardian_email'] = parent_user.email or parent_user.username
+                data['guardian_name']  = parent_user.username
+                data['guardian_phone'] = parent_profile.phone
+                data['occupation']     = parent_profile.occupation
+                data['relation']       = parent_profile.relation
+            return data
+
         if obj.role in ('teacher', 'non_teaching') and hasattr(obj, 'faculty_profile'):
             return FacultyProfileSerializer(obj.faculty_profile).data
         if obj.role == 'parent' and hasattr(obj, 'parent_profile'):
@@ -177,9 +192,28 @@ class UserSerializer(serializers.ModelSerializer):
         user.save()   # roll number / employee id auto-generate here
 
         self._save_profile(user, profile_data)
-        return user
 
-    # ================= UPDATE USER =================
+        # ---- auto-create / link a parent for students ----
+        if user.role == 'student' and profile_data:
+            guardian_email = profile_data.get('guardian_email', '')
+            if guardian_email:
+                from .views import create_or_link_parent
+                create_or_link_parent(
+                    student=user,
+                    guardian_name=profile_data.get('father_name') or profile_data.get('mother_name') or '',
+                    guardian_email=guardian_email,
+                    guardian_phone=profile_data.get('guardian_phone', ''),
+                    occupation=profile_data.get('occupation', ''),
+                    relation=profile_data.get('relation', ''),
+                )
+
+        # ---- auto-enroll a new student into their course-semester subjects ----
+        if user.role == 'student':
+            from courses.services import enroll_student
+            enroll_student(user)
+
+        return user
+   # ================= UPDATE USER =================
     def update(self, instance, validated_data):
         profile_data = validated_data.pop('profile', None)
         password = validated_data.pop('password', None)
@@ -195,9 +229,25 @@ class UserSerializer(serializers.ModelSerializer):
         if profile_data is not None:
             self._save_profile(instance, profile_data)
 
+        # ---- auto-link a parent ONLY if this student has none yet ----
+        # Students who already have a linked parent are left untouched
+        # (no duplicates, existing link not disturbed).
+        if instance.role == 'student' and profile_data:
+            if not instance.parents.exists():
+                guardian_email = profile_data.get('guardian_email', '')
+                if guardian_email:
+                    from .views import create_or_link_parent
+                    create_or_link_parent(
+                        student=instance,
+                        guardian_name=profile_data.get('father_name') or profile_data.get('mother_name') or '',
+                        guardian_email=guardian_email,
+                        guardian_phone=profile_data.get('guardian_phone', ''),
+                        occupation=profile_data.get('occupation', ''),
+                        relation=profile_data.get('relation', ''),
+                    )
+
         return instance
-
-
+    
 # ================= FACULTY PARTICIPATION (IQAC) =================
 class FacultyParticipationSerializer(serializers.ModelSerializer):
 

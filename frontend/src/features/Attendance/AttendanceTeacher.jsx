@@ -258,7 +258,9 @@ export default function AttendanceTeacher() {
     const rows = reportData.map((s, idx) => {
       const ahPct = s.total > 0 ? ((s.present / s.total) * 100).toFixed(2) : "0.00";
       const dlPct = s.total > 0 ? (((s.present + s.duty) / s.total) * 100).toFixed(2) : "0.00";
-      const isLow = parseFloat(ahPct) < 75;
+      // Red-flag uses the OFFICIAL percentage (attendance incl. duty leave),
+      // so students protected by approved OD are not wrongly flagged.
+      const isLow = parseFloat(dlPct) < 75;
       return `<tr style="color:${isLow ? "#dc2626" : "#000"}">
         <td style="border:1px solid #ccc;padding:6px;text-align:center">${idx + 1}</td>
         <td style="border:1px solid #ccc;padding:6px">${s.name}</td>
@@ -267,8 +269,8 @@ export default function AttendanceTeacher() {
         <td style="border:1px solid #ccc;padding:6px;text-align:center">${s.present}</td>
         <td style="border:1px solid #ccc;padding:6px;text-align:center">${s.duty}</td>
         <td style="border:1px solid #ccc;padding:6px;text-align:center">${s.present + s.duty}</td>
-        <td style="border:1px solid #ccc;padding:6px;text-align:center;${isLow ? "color:#dc2626;font-weight:700" : "color:#16a34a;font-weight:700"}">${ahPct}%</td>
-        <td style="border:1px solid #ccc;padding:6px;text-align:center;font-weight:600">${dlPct}%</td>
+        <td style="border:1px solid #ccc;padding:6px;text-align:center;font-weight:600">${ahPct}%</td>
+        <td style="border:1px solid #ccc;padding:6px;text-align:center;${isLow ? "color:#dc2626;font-weight:700" : "color:#16a34a;font-weight:700"}">${dlPct}%</td>
       </tr>`;
     }).join("");
     const html = `<html><head><title>Attendance Report</title>
@@ -284,9 +286,10 @@ export default function AttendanceTeacher() {
       <p class="info"><b>Subject:</b> ${subjectName} &nbsp;&nbsp; <b>Period:</b> ${fromDate} to ${toDate}</p>
       <table><thead><tr>
         <th>Sl.No</th><th>Student Name</th><th>Roll No</th>
-        <th>TH</th><th>AH</th><th>DL</th><th>AH+DL</th><th>AH%</th><th>AH+DL%</th>
+        <th>Total<br>Hours</th><th>Attended<br>Hours</th><th>Duty<br>Leave</th><th>Attended<br>+ Duty</th>
+        <th>Attendance %<br>(actual)</th><th>Official %<br>(incl. OD)</th>
       </tr></thead><tbody>${rows}</tbody></table>
-      <p style="font-size:11px;color:#888;margin-top:8px">* Red = below 75% | TH: Total Hours | AH: Attended | DL: Duty Leave</p>
+      <p style="font-size:11px;color:#888;margin-top:8px">* Red = official attendance below 75% (duty leave counts as present)</p>
     </body></html>`;
     const win = window.open("", "_blank");
     win.document.write(html);
@@ -529,14 +532,10 @@ export default function AttendanceTeacher() {
                     )}
                   </div>
 
-                  {/* Legend */}
+                  {/* Small note explaining the two percentages, in plain words */}
                   <div className="att-legend">
-                    <span><b>TH</b> Total Hours</span>
-                    <span><b>AH</b> Attended Hours</span>
-                    <span><b>DL</b> Duty Leave</span>
-                    <span><b>AH+DL</b> Attended + Duty Leave</span>
-                    <span><b>AH%</b> Attendance %</span>
-                    <span><b>AH+DL%</b> Attendance with Duty Leave %</span>
+                    <span><b>Attendance %</b> — actual classes attended</span>
+                    <span><b>Official %</b> — counts approved duty leave as present (the 75% rule)</span>
                   </div>
 
                   {fromDate && toDate && reportData.length > 0 && (
@@ -556,19 +555,21 @@ export default function AttendanceTeacher() {
                               <th>Sl.No</th>
                               <th>Student Name</th>
                               <th>Roll No</th>
-                              <th className="center">TH</th>
-                              <th className="center">AH</th>
-                              <th className="center">DL</th>
-                              <th className="center">AH+DL</th>
-                              <th className="center">AH%</th>
-                              <th className="center">AH+DL%</th>
+                              <th className="center">Total Hours</th>
+                              <th className="center">Attended</th>
+                              <th className="center">Duty Leave</th>
+                              <th className="center">Attended + Duty</th>
+                              <th className="center">Attendance %</th>
+                              <th className="center">Official %</th>
                             </tr>
                           </thead>
                           <tbody>
                             {reportData.map((s, idx) => {
                               const ahPct = s.total > 0 ? ((s.present / s.total) * 100).toFixed(2) : "0.00";
                               const dlPct = s.total > 0 ? (((s.present + s.duty) / s.total) * 100).toFixed(2) : "0.00";
-                              const isLow = parseFloat(ahPct) < 75;
+                              // Red-flag now follows the OFFICIAL percentage (incl. duty leave),
+                              // so OD-protected students aren't wrongly flagged low.
+                              const isLow = parseFloat(dlPct) < 75;
                               return (
                                 <tr key={idx} className={isLow ? "att-row-low" : ""}>
                                   <td>{idx + 1}</td>
@@ -578,15 +579,15 @@ export default function AttendanceTeacher() {
                                   <td className="center">{s.present}</td>
                                   <td className="center">{s.duty}</td>
                                   <td className="center">{s.present + s.duty}</td>
-                                  <td className={`center att-pct${isLow ? " low" : " good"}`}>{ahPct}%</td>
-                                  <td className="center att-pct">{dlPct}%</td>
+                                  <td className="center att-pct">{ahPct}%</td>
+                                  <td className={`center att-pct${isLow ? " low" : " good"}`}>{dlPct}%</td>
                                 </tr>
                               );
                             })}
                           </tbody>
                         </table>
                       </div>
-                      <p className="att-footnote">* Rows highlighted in red indicate attendance below 75%</p>
+                      <p className="att-footnote">* Rows highlighted in red indicate official attendance below 75% (duty leave counts as present)</p>
                     </>
                   )}
                 </div>

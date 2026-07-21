@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import (IsAuthenticated, AllowAny)
 from rest_framework_simplejwt.tokens import (RefreshToken)
 
-from .models import (User, Department)
+from .models import (User, Department,ParentProfile)
 from .serializers import (UserSerializer, DepartmentSerializer)
 
 
@@ -84,12 +84,7 @@ class UserViewSet(viewsets.ModelViewSet):
         )
 
     # ================= UPDATE =================
-    def update(
-        self,
-        request,
-        *args,
-        **kwargs
-    ):
+    def update( self, request, *args, **kwargs ):
 
         instance = self.get_object()
 
@@ -113,12 +108,7 @@ class UserViewSet(viewsets.ModelViewSet):
         )
 
     # ================= DELETE =================
-    def destroy(
-        self,
-        request,
-        *args,
-        **kwargs
-    ):
+    def destroy( self, request, *args, **kwargs ):
 
         user = self.get_object()
 
@@ -191,46 +181,35 @@ def login_view(request):
 
         return Response({
 
-            "access":
-                str(refresh.access_token),
+            "access": str(refresh.access_token),
 
-            "refresh":
-                str(refresh),
+            "refresh": str(refresh),
 
-            "id":
-                user.id,
+            "id": user.id,
 
-            "username":
-                user.username,
+            "username": user.username,
 
-            "email":
-                user.email,
+            "email": user.email,
 
-            "role":
-                role,
+            "role": role,
             
-             "sub_role":
-                user.sub_role,
+            "sub_role": user.sub_role,
+            "must_change_password": user.must_change_password,
 
             # DEPARTMENT
-            "department":
-                user.department.id
+            "department": user.department.id
                 if user.department
                 else None,
 
-            "department_name":
-                user.department.name
+            "department_name": user.department.name
                 if user.department
                 else None,
 
-            "roll_number":
-                user.roll_number,
+            "roll_number": user.roll_number,
 
-            "employee_id":
-                user.employee_id,
+            "employee_id": user.employee_id,
 
-            "is_superuser":
-                user.is_superuser
+            "is_superuser": user.is_superuser
         })
 
     return Response(
@@ -286,6 +265,68 @@ def _generate_password(length=8):
     alphabet = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
+# ===================== PARENT AUTO-CREATION HELPER =====================
+def create_or_link_parent(student, guardian_name="", guardian_email="",  guardian_phone="", occupation="", relation=""):
+    """
+    Create a parent account for a student (or reuse an existing one for siblings)
+    and link the student to it.
+
+    - Parent's username  = guardian email
+    - Parent's password  = the student's roll number (first-login password)
+    - must_change_password = True  (forced to change on first login)
+
+    Returns the parent User, or None if no guardian email was given.
+    """
+    guardian_email = (guardian_email or "").strip()
+    if not guardian_email:
+        return None   # can't make a login without an email
+
+    guardian_name = (guardian_name or "").strip()
+
+    # 1) reuse an existing parent with this email, else create a new one
+    parent = User.objects.filter(email=guardian_email, role="parent").first()
+
+    if parent is None:
+        # avoid username clash if the email is already used by a non-parent
+        base_username = guardian_email
+        username = base_username
+        n = 1
+        while User.objects.filter(username=username).exists():
+            n += 1
+            username = f"{base_username}_{n}"
+
+        parent = User(
+            username=username,
+            email=guardian_email,
+            role="parent",
+            first_name=guardian_name,          # <-- store the guardian's name
+            must_change_password=True,
+        )
+        # first password = the student's roll number
+        parent.set_password(student.roll_number or guardian_email)
+        parent.save()
+    else:
+        # existing parent: fill in the name if it was blank before
+        if guardian_name and not parent.first_name:
+            parent.first_name = guardian_name
+            parent.save()
+
+    # 2) make sure a ParentProfile exists
+    profile, _ = ParentProfile.objects.get_or_create(user=parent)
+
+    # 3) fill contact details (only overwrite if a value was provided)
+    if guardian_phone:
+        profile.phone = guardian_phone
+    if occupation:
+        profile.occupation = occupation
+    if relation:
+        profile.relation = relation
+    profile.save()
+
+    # 4) link this student to the parent (ManyToMany — safe to add again)
+    profile.children.add(student)
+
+    return parent
 
 # ===================== STUDENT CSV: TEMPLATE =====================
 @api_view(["GET"])
@@ -327,6 +368,7 @@ def student_import(request):
     reader = csv.DictReader(io.StringIO(decoded))
 
     from courses.models import Course
+    from courses.services import enroll_student
     dept_map = {d.name.strip().lower(): d for d in Department.objects.all()}
     course_map = {c.name.strip().lower(): c for c in Course.objects.all()}
 
@@ -379,6 +421,10 @@ def student_import(request):
             )
             user.set_password(password)
             user.save()   # roll number auto-generated by the model
+
+            # auto-enroll this student into their course-semester subjects
+            enroll_student(user)
+
             created.append({
                 "username": user.username,
                 "roll_number": user.roll_number,
@@ -407,16 +453,23 @@ def change_password(request):
     old = request.data.get("old_password")
     new = request.data.get("new_password")
 
-    if not old or not new:
-        return Response({"detail": "old_password and new_password are required."}, status=400)
-
-    if not request.user.check_password(old):
-        return Response({"detail": "Current password is incorrect."}, status=400)
+    if not new:
+        return Response({"detail": "new_password is required."}, status=400)
 
     if len(new) < 6:
         return Response({"detail": "New password must be at least 6 characters."}, status=400)
 
+    # Normal change: old password is required and must match.
+    # First-login change (must_change_password): skip the old-password check,
+    # since the parent is using their temporary roll-number password.
+    if not request.user.must_change_password:
+        if not old:
+            return Response({"detail": "old_password and new_password are required."}, status=400)
+        if not request.user.check_password(old):
+            return Response({"detail": "Current password is incorrect."}, status=400)
+
     request.user.set_password(new)
+    request.user.must_change_password = False   # clear the first-login flag
     request.user.save()
     return Response({"detail": "Password changed successfully."})
 
@@ -430,6 +483,10 @@ def promote_students(request):
     Semester 8 students are skipped (final semester).
     Does NOT touch results, IA marks, or materials — those stay tagged by
     their original semester, preserving academic history.
+
+    After promotion, each student is auto-enrolled into the NEW semester's
+    subjects (add-only; their previous-semester enrollments are kept so past
+    attendance/marks/results stay intact).
     """
     if request.user.role != "admin":
         return Response({"detail": "Only admin."}, status=403)
@@ -464,18 +521,25 @@ def promote_students(request):
     # year advances every 2 semesters: ceil(new_semester / 2)
     new_year = (new_semester + 1) // 2
 
+    from courses.services import enroll_student
+
     promoted = 0
+    enrolled = 0
     for s in students:
         s.semester = new_semester
         s.year = new_year
         s.save(update_fields=["semester", "year"])
         promoted += 1
 
+        # enroll into the new semester's subjects (keeps old enrollments)
+        enrolled += enroll_student(s)
+
     return Response({
         "detail": f"Promoted {promoted} student(s) to Year {new_year}, Semester {new_semester}.",
         "promoted": promoted,
         "new_year": new_year,
         "new_semester": new_semester,
+        "new_enrollments": enrolled,
     })
 
 # ===================== HOD: MY DEPARTMENT =====================
@@ -490,10 +554,8 @@ def my_department(request):
         return Response({"is_hod": False, "departments": []})
 
     from courses.models import TeachingAssignment
-    from attendance.models import Attendance
+    from attendance.services import attendance_percentage
     from exams.models import SemesterResult
-
-    PRESENT_STATUSES = ["present", "duty_leave"]
 
     result = []
     for dept in departments:
@@ -531,10 +593,7 @@ def my_department(request):
             })
 
         # ----- department attendance average -----
-        att_records = Attendance.objects.filter(student_id__in=student_ids)
-        att_total = att_records.count()
-        att_present = att_records.filter(status__in=PRESENT_STATUSES).count()
-        attendance_percent = round((att_present / att_total) * 100, 1) if att_total else None
+        attendance_percent = attendance_percentage(list(student_ids))
 
         # ----- pass % and arrears (from published results) -----
         results = (
@@ -708,9 +767,8 @@ def hod_attendance(request):
     if not departments.exists():
         return Response({"is_hod": False, "departments": []})
 
-    from attendance.models import Attendance
+    from attendance.services import attendance_percentage
 
-    PRESENT_STATUSES = ["present", "duty_leave"]
     THRESHOLD = 75
     WARN_BAND = 80
 
@@ -723,12 +781,9 @@ def hod_attendance(request):
 
         at_risk = []
         for s in students:
-            records = Attendance.objects.filter(student=s)
-            total = records.count()
-            if total == 0:
-                continue
-            counted = records.filter(status__in=PRESENT_STATUSES).count()
-            pct = round((counted / total) * 100, 1)
+            pct = attendance_percentage(s.id)
+            if pct is None:
+                continue   # no attendance records for this student
 
             if pct < WARN_BAND:
                 at_risk.append({
@@ -925,7 +980,7 @@ def my_class(request):
     user = request.user
 
     from courses.models import YearTutor
-    from attendance.models import Attendance
+    from attendance.services import attendance_percentage
     from exams.models import SemesterResult
 
     tutor_links = (
@@ -934,16 +989,10 @@ def my_class(request):
     )
     if not tutor_links.exists():
         return Response({"is_tutor": False, "classes": []})
-
-    PRESENT_STATUSES = ["present", "duty_leave"]
+    
 
     def attendance_pct(student):
-        records = Attendance.objects.filter(student=student)
-        total = records.count()
-        if total == 0:
-            return None
-        counted = records.filter(status__in=PRESENT_STATUSES).count()
-        return round((counted / total) * 100, 1)
+        return attendance_percentage(student.id)
 
     def result_status(student):
         """passed / failed / None (no published result)."""
@@ -1053,8 +1102,7 @@ def od_my_requests(request):
     from attendance.models import ODRequest
     from attendance.serializers import ODRequestSerializer
     qs = ODRequest.objects.filter(student=request.user)
-    return Response(ODRequestSerializer(qs, many=True).data)
-
+    return Response(ODRequestSerializer(qs, many=True, context={"request": request}).data)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -1084,8 +1132,7 @@ def tutor_od_pending(request):
         stage=ODRequest.Stage.AWAITING_TUTOR,
         status=ODRequest.Status.PENDING,
     )
-    return Response(ODRequestSerializer(qs, many=True).data)
-
+    return Response(ODRequestSerializer(qs, many=True, context={"request": request}).data)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -1127,7 +1174,7 @@ def hod_od_pending(request):
         stage=ODRequest.Stage.AWAITING_HOD,
         status=ODRequest.Status.PENDING,
     )
-    return Response(ODRequestSerializer(qs, many=True).data)
+    return Response(ODRequestSerializer(qs, many=True, context={"request": request}).data)
 
 
 @api_view(["POST"])
@@ -1173,10 +1220,8 @@ def hod_class_performance(request):
         return Response({"is_hod": False, "departments": []})
 
     from courses.models import YearTutor
-    from attendance.models import Attendance
+    from attendance.services import attendance_percentage
     from exams.models import SemesterResult
-
-    PRESENT_STATUSES = ["present", "duty_leave"]
 
     result = []
     for dept in departments:
@@ -1211,12 +1256,7 @@ def hod_class_performance(request):
             student_ids = [s.id for s in year_students]
 
             # ----- attendance % for the year -----
-            att_records = Attendance.objects.filter(student_id__in=student_ids)
-            att_total = att_records.count()
-            att_present = att_records.filter(status__in=PRESENT_STATUSES).count()
-            attendance_percent = (
-                round((att_present / att_total) * 100, 1) if att_total else None
-            )
+            attendance_percent = attendance_percentage(list(student_ids))
 
             # ----- pass/fail + per-subject breakdown (published results) -----
             results = (
@@ -1646,12 +1686,12 @@ def iqac_participation_summary(request):
 def iqac_academic_quality(request):
   
     from attendance.models import Attendance
+    from attendance.services import attendance_percentage
     from exams.models import SemesterResult
 
     if not _is_iqac(request.user):
         return Response({"detail": "Only the IQAC admin can view this."}, status=403)
-
-    PRESENT_STATUSES = ["present", "duty_leave"]
+    
 
     year_filter = request.query_params.get("year")
     try:
@@ -1720,10 +1760,7 @@ def iqac_academic_quality(request):
             pass_percent = round((passed / evaluated) * 100, 1) if evaluated else None
 
             # attendance % for this year-group
-            att = Attendance.objects.filter(student_id__in=student_ids)
-            att_total = att.count()
-            att_present = att.filter(status__in=PRESENT_STATUSES).count()
-            attendance_percent = round((att_present / att_total) * 100, 1) if att_total else None
+            attendance_percent = attendance_percentage(list(student_ids))
 
             weak_subjects = [
                 {"subject": name, "fails": cnt}
@@ -1776,4 +1813,217 @@ def iqac_academic_quality(request):
             "departments": len(dept_blocks),
         },
         "departments": dept_blocks,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def hod_allocation_subjects(request):
+    """
+    Oversight view for an HOD.
+
+    Shows EVERY subject in the selected course + semester (all ~8 a student
+    studies), not just the ones this department owns — so the HOD can see at a
+    glance whether every subject has a teacher.
+
+      editable=True  -> subject owned by the HOD's department; HOD can assign.
+      editable=False -> owned by another department; shown read-only.
+
+    Course dropdown = the department's own class course(s) (from its students)
+    PLUS any course the department owns a subject in (service subjects), so a
+    service subject taught into another branch stays assignable.
+    """
+    from courses.models import Course, Subject, TeachingAssignment
+
+    user = request.user
+
+    department = Department.objects.filter(hod=user).first()
+    if not department:
+        return Response({"detail": "You are not an HOD."}, status=403)
+
+    # ---- courses this HOD should see ----
+    # (a) courses their students belong to
+    student_course_ids = set(
+        User.objects.filter(role="student", department=department)
+        .exclude(course__isnull=True)
+        .values_list("course_id", flat=True)
+    )
+    # (b) courses this department owns a subject in (service subjects)
+    owned_course_ids = set(
+        Subject.objects.filter(department=department)
+        .exclude(year__course__isnull=True)
+        .values_list("year__course_id", flat=True)
+    )
+    course_ids = student_course_ids | owned_course_ids
+
+    courses = list(Course.objects.filter(id__in=course_ids).order_by("name"))
+    course_list = [{"id": c.id, "name": c.name} for c in courses]
+
+    if not courses:
+        return Response({
+            "department": department.name,
+            "courses": [],
+            "selected_course": None,
+            "subjects": [],
+            "teachers": [],
+        })
+
+    # ---- which course is selected ----
+    course_param = request.query_params.get("course")
+    selected = None
+    if course_param:
+        selected = next((c for c in courses if str(c.id) == str(course_param)), None)
+    if selected is None:
+        selected = courses[0]
+
+    semester = request.query_params.get("semester")
+
+    # ---- all subjects in this course (+ semester), any owner ----
+    subjects_qs = Subject.objects.filter(year__course=selected)
+    if semester:
+        subjects_qs = subjects_qs.filter(semester=semester)
+    subjects_qs = subjects_qs.select_related(
+        "year", "year__course", "department"
+    ).order_by("year__year_number", "name")
+
+    subjects = []
+    for s in subjects_qs:
+        ta = TeachingAssignment.objects.filter(
+            subject=s,
+            year=s.year,
+            course=s.year.course,
+        ).select_related("teacher").first()
+
+        subjects.append({
+            "subject_id": s.id,
+            "subject_name": s.name,
+            "code": s.code,
+            "semester": s.semester,
+            "year_number": s.year.year_number,
+            "course_name": s.year.course.name,
+            "owner_department": s.department.name if s.department else None,
+            "editable": bool(s.department_id and s.department_id == department.id),
+            "assigned_teacher_id": ta.teacher.id if ta else None,
+            "assigned_teacher_name": (
+                (ta.teacher.first_name or ta.teacher.username) if ta else None
+            ),
+        })
+
+    # teachers of THIS department (only used for the editable rows' dropdown)
+    teachers = User.objects.filter(
+        department=department, role="teacher"
+    ).order_by("username")
+    teacher_list = [
+        {
+            "id": t.id,
+            "name": (t.first_name or t.username),
+            "is_me": t.id == user.id,
+        }
+        for t in teachers
+    ]
+
+    return Response({
+        "department": department.name,
+        "courses": course_list,
+        "selected_course": selected.id,
+        "subjects": subjects,
+        "teachers": teacher_list,
+    })
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def hod_allocate(request):
+    from courses.models import Subject, TeachingAssignment, Enrollment
+
+    user = request.user
+
+    department = Department.objects.filter(hod=user).first()
+    if not department:
+        return Response({"detail": "You are not an HOD."}, status=403)
+
+    subject_id = request.data.get("subject_id")
+    teacher_id = request.data.get("teacher_id")
+
+    if not subject_id or not teacher_id:
+        return Response(
+            {"detail": "subject_id and teacher_id are required."},
+            status=400,
+        )
+
+    subject = Subject.objects.filter(
+        id=subject_id, department=department
+    ).select_related("year", "year__course").first()
+
+    if not subject:
+        return Response(
+            {"detail": "Subject not found in your department."},
+            status=404,
+        )
+
+    teacher = User.objects.filter(
+        id=teacher_id, department=department, role="teacher"
+    ).first()
+
+    if not teacher:
+        return Response(
+            {"detail": "Teacher not found in your department."},
+            status=404,
+        )
+
+    course = subject.year.course
+    year = subject.year
+
+    ta = TeachingAssignment.objects.filter(
+        subject=subject, year=year, course=course
+    ).first()
+
+    if ta:
+        if ta.teacher_id == teacher.id:
+            return Response({
+                "detail": f"{subject.name} is already assigned to that teacher.",
+                "subject_id": subject.id,
+                "assigned_teacher_id": teacher.id,
+                "assigned_teacher_name": (teacher.first_name or teacher.username),
+            })
+        ta.teacher = teacher
+    else:
+        ta = TeachingAssignment(
+            teacher=teacher, course=course, year=year, subject=subject
+        )
+
+    try:
+        ta.full_clean()
+        ta.save()
+    except Exception as e:
+        return Response({"detail": f"Could not assign: {e}"}, status=400)
+
+    # ---- auto-enroll existing students in this class into this subject ----
+    # Any student already sitting in this subject's course + year + semester
+    # gets enrolled into this teaching assignment now (add-only, no duplicates).
+    # This closes the gap where a subject/teacher is set up AFTER students exist.
+    #
+    # ELECTIVES are skipped: students self-enrol in the electives they choose,
+    # so we must NOT auto-enrol everyone into them here.
+    enrolled = 0
+    if not subject.is_elective:
+        matching_students = User.objects.filter(
+            role="student",
+            course=course,
+            year=year.year_number,
+            semester=subject.semester,
+        )
+        for student in matching_students:
+            _, was_created = Enrollment.objects.get_or_create(
+                student=student,
+                teaching_assignment=ta,
+            )
+            if was_created:
+                enrolled += 1
+
+    return Response({
+        "detail": f"{subject.name} assigned to {teacher.first_name or teacher.username}.",
+        "subject_id": subject.id,
+        "assigned_teacher_id": teacher.id,
+        "assigned_teacher_name": (teacher.first_name or teacher.username),
+        "students_enrolled": enrolled,
     })

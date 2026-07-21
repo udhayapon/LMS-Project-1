@@ -1,6 +1,9 @@
 import csv
 import io
 import datetime
+import os, json, datetime, requests
+from django.apps import apps
+from courses.models import Subject
 from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
@@ -11,6 +14,7 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse
 from .services import compute_grade
+from events.holidays import holiday_dates
 
 from .models import( InternalAssessment, IAMark,ExamSchedule,RevaluationRequest, RevaluationWindow,SemesterResult, ResultEntry)
 
@@ -491,9 +495,23 @@ ATTENDANCE_FINE_TERM = "Attendance Shortage Fine"
 ATTENDANCE_THRESHOLD = 75
 
 
+def _fine_term(semester):
+    """
+    One fine per student per semester. The term string is the key.
+
+    Fee has no semester column, so the semester lives in the term text.
+    Without this, a fine paid in Sem 3 would keep a student 'eligible'
+    for every later semester regardless of their attendance.
+    """
+    return f"{ATTENDANCE_FINE_TERM} - Sem {semester}"
+
+
 def _attendance_percent(student):
-    """ (present + duty_leave) / total  across all the student's records. """
-    records = Attendance.objects.filter(student=student)
+
+    records = Attendance.objects.filter(
+        student=student,
+        teaching_assignment__subject__semester=student.semester,
+    )
     total = records.count()
     if total == 0:
         return None  # no records yet
@@ -502,18 +520,26 @@ def _attendance_percent(student):
 
 
 def _is_eligible(student):
-    """ Eligible if attendance >= 75% OR the attendance fine is paid. """
+    """
+    Eligible if attendance >= 75% OR this semester's fine is paid.
+
+    No attendance records at all -> blocked. Such a student IS fineable
+    (see generate_attendance_fines), so they always have a way to unblock.
+    Blocked must imply fineable, or the student is stuck forever.
+    """
     pct = _attendance_percent(student)
     if pct is not None and pct >= ATTENDANCE_THRESHOLD:
         return True, pct, "attendance"
-    # below threshold (or no records) — check fine
+
+    # below threshold (or no records) — check this semester's fine
     fine_paid = Fee.objects.filter(
         student=student,
-        term=ATTENDANCE_FINE_TERM,
+        term=_fine_term(student.semester),
         status="paid",
     ).exists()
     if fine_paid:
         return True, pct, "fine_paid"
+
     return False, pct, "blocked"
 
 # ===================== SEMESTER RESULT: CSV TEMPLATE =====================
@@ -669,10 +695,10 @@ def my_hall_ticket(request):
     # sort by exam date (subjects without a date go last)
     subjects.sort(key=lambda s: (s["exam_date"] is None, s["exam_date"] or ""))
 
-    # is there an unpaid attendance fine to show a Pay button for?
+    # is there an unpaid attendance fine for THIS semester to show a Pay button for?
     fine = Fee.objects.filter(
         student=user,
-        term=ATTENDANCE_FINE_TERM,
+        term=_fine_term(user.semester),
     ).exclude(status="paid").first()
 
     return Response({
@@ -712,7 +738,7 @@ def hall_ticket_roster(request):
     for s in students:
         eligible, pct, reason = _is_eligible(s)
         has_fine = Fee.objects.filter(
-            student=s, term=ATTENDANCE_FINE_TERM,
+            student=s, term=_fine_term(s.semester),
         ).exclude(status="paid").exists()
         data.append({
             "student": s.id,
@@ -731,8 +757,13 @@ def hall_ticket_roster(request):
 @permission_classes([IsAuthenticated])
 def generate_attendance_fines(request):
     """
-    Admin creates an attendance-shortage fine for every below-75% student
-    in a course/year/semester who doesn't already have one. One click, bulk.
+    Admin creates an attendance-shortage fine for every NOT-ELIGIBLE student
+    in a course/year/semester who doesn't already have one for this semester.
+
+    The rule is _is_eligible() — the SAME rule that blocks the hall ticket.
+    If a student is blocked, they must be fineable, or they can never unblock.
+    (This covers students with no attendance records at all: previously they
+    were blocked but skipped by fine generation, leaving them stuck.)
     """
     if not is_exam_admin(request.user):
         return Response({"detail": "Only admin or exam admin."}, status=403)
@@ -746,27 +777,168 @@ def generate_attendance_fines(request):
     if not (course and year and semester and amount):
         return Response({"detail": "course, year, semester and amount are required."}, status=400)
 
+    # Fee.due_date is NOT NULL, and the roster has no date picker.
+    # Default to 14 days out when the admin doesn't supply one.
+    if not due_date:
+        due_date = datetime.date.today() + datetime.timedelta(days=14)
+
     students = User.objects.filter(
         role="student", course_id=course, year=year, semester=semester,
     )
 
+    term = _fine_term(semester)
+
     created = 0
+    skipped = 0
     for s in students:
         eligible, pct, reason = _is_eligible(s)
-        # only fine those genuinely short on attendance and not already fined/paid
-        if pct is not None and pct < ATTENDANCE_THRESHOLD:
-            already = Fee.objects.filter(student=s, term=ATTENDANCE_FINE_TERM).exists()
-            if not already:
-                Fee.objects.create(
-                    student=s,
-                    term=ATTENDANCE_FINE_TERM,
-                    amount=amount,
-                    due_date=due_date,
-                    status="pending",
-                )
-                created += 1
+        if eligible:
+            continue  # meets attendance, or already paid this semester's fine
 
-    return Response({"message": f"{created} attendance fine(s) created.", "created": created})
+        if Fee.objects.filter(student=s, term=term).exists():
+            skipped += 1
+            continue
+
+        Fee.objects.create(
+            student=s,
+            term=term,
+            amount=amount,
+            due_date=due_date,
+            status="pending",
+        )
+        created += 1
+
+    return Response({
+        "message": f"{created} attendance fine(s) created, {skipped} already existed.",
+        "created": created,
+        "skipped": skipped,
+    })
+# ===================== EXAM DRAFT HELPERS =====================
+def _term_window():
+    Semester = apps.get_model("timetable", "Semester")
+    sem = Semester.objects.filter(is_active=True).order_by("-start_date").first()
+    return (sem.start_date, sem.end_date) if sem else (None, None)
+
+def _working_dates(start, end):
+    
+    """
+    Working days in the term: no weekends (Sat OR Sun), no holidays.
+    Every date the auto-arrange / AI-arrange can use comes from here, so the
+    weekend rule only has to be correct in this one place.
+    """
+    holidays = holiday_dates()
+    out, d = [], start
+    while d and d <= end:
+        is_weekend = d.weekday() >= 5          # 5 = Saturday, 6 = Sunday
+        if not is_weekend and d not in holidays:
+            out.append(d)
+        d += datetime.timedelta(days=1)
+    return out
+
+def _class_subjects(course, year, semester):
+    return list(Subject.objects.filter(
+        year__course_id=course, year__year_number=year, semester=semester,
+    ).order_by("name"))
+
+def _auto_arrange(subjects, dates, gap=1, session="FN", per_day=1):
+    rows = []
+    if not dates:
+        return rows
+    # only two sessions exist (FN, AN) -> at most 2 non-clashing exams per day
+    per_day = max(1, min(2, per_day))
+    if per_day == 1:
+        slot_sessions = [session]
+    else:
+        # 2 per day: pair one FN + one AN; "afternoon" pref just puts AN first
+        slot_sessions = ["AN", "FN"] if session == "AN" else ["FN", "AN"]
+    for i, s in enumerate(subjects):
+        slot = i % per_day               # which session slot within the day
+        day_no = (i // per_day) * gap    # advance the day every `per_day` subjects
+        d = dates[min(day_no, len(dates) - 1)]
+        rows.append({"subject": s.id, "exam_date": d.isoformat(), "session": slot_sessions[slot]})
+    return rows
+
+def _norm_date(s):
+    """Coerce whatever Gemini returns into 'YYYY-MM-DD', or None if unusable."""
+    s = (s or "").strip()
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%d/%m/%Y",
+                "%B %d, %Y", "%B %d %Y", "%d %B %Y"):
+        try:
+            return datetime.datetime.strptime(s, fmt).date().isoformat()
+        except ValueError:
+            continue
+    # non-padded ISO like 2025-8-5
+    import re as _re
+    m = _re.match(r"(\d{4})-(\d{1,2})-(\d{1,2})", s)
+    if m:
+        y, mo, da = map(int, m.groups())
+        try:
+            return datetime.date(y, mo, da).isoformat()
+        except ValueError:
+            return None
+    return None
+
+
+def _ai_arrange(subjects, dates, preference, session="FN"):
+    """Ask Gemini to arrange subjects across the given dates. Returns normalized rows.
+    Raises on any failure so the caller can fall back to regex."""
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not key:
+        raise ValueError("GEMINI_API_KEY is not set in the environment.")
+
+    subj = "\n".join(f"- id={s.id} {s.code or ''} {s.name}" for s in subjects)
+    days = ", ".join(d.isoformat() for d in dates)
+    prompt = (
+        "Schedule exams for one class.\n"
+        "Subjects:\n" + subj +
+        "\n\nAllowed dates (weekends/holidays already removed, use ONLY these): " + days +
+        "\nSessions are FN or AN. Default session: " + session +
+        "\nPreference from admin: " + (preference or "none") +
+        '\n\nReturn ONLY a JSON array, no markdown, no explanation: '
+        '[{"subject": <id>, "exam_date": "YYYY-MM-DD", "session": "FN"}]. '
+        "Use only the ids and dates listed above. "
+        "No two subjects on the same date+session."
+    )
+
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        "gemini-2.0-flash:generateContent?key=" + key
+    )
+    r = requests.post(
+        url,
+        headers={"content-type": "application/json"},
+        json={"contents": [{"parts": [{"text": prompt}]}]},
+        timeout=30,
+    )
+    data = r.json()
+    if "candidates" not in data:
+        raise ValueError(f"Gemini error: {data}")
+
+    text = data["candidates"][0]["content"]["parts"][0]["text"]
+
+    # strip ```json fences if present, then pull out the array
+    import re as _re
+    text = _re.sub(r"```(?:json)?", "", text).strip()
+    m = _re.search(r"\[.*\]", text, _re.S)
+    if not m:
+        raise ValueError(f"No JSON array in reply: {text[:300]}")
+
+    parsed = json.loads(m.group(0))
+
+    # normalize each row (fix date formats, clamp session)
+    out = []
+    for row in parsed:
+        d = _norm_date(row.get("exam_date"))
+        if not d:
+            continue
+        sess = row.get("session")
+        out.append({
+            "subject":   row.get("subject"),
+            "exam_date": d,
+            "session":   sess if sess in ("FN", "AN") else session,
+        })
+    return out
+
 
 # ===================== EXAM SCHEDULE =====================
 class ExamScheduleViewSet(viewsets.ModelViewSet):
@@ -801,6 +973,210 @@ class ExamScheduleViewSet(viewsets.ModelViewSet):
         if not is_exam_admin(self.request.user):
             raise PermissionDenied("Only admin or exam admin can delete exam schedules.")
         instance.delete()
+
+    # ================= DRAFT (reads the preference text reliably) =================
+    @action(detail=False, methods=["post"], url_path="draft")
+    def draft(self, request):
+        if not is_exam_admin(request.user):
+            raise PermissionDenied("Only admin or exam admin.")
+        course     = request.data.get("course")
+        year       = request.data.get("year")
+        semester   = request.data.get("semester")
+        preference = request.data.get("preference", "")
+        mode       = (request.data.get("mode") or "auto").lower()   # NEW
+        if not (course and year and semester):
+            return Response({"detail": "course, year and semester are required."}, status=400)
+
+        subjects = _class_subjects(course, year, semester)
+        if not subjects:
+            return Response({"detail": "No subjects for this class."}, status=400)
+        start, end = _term_window()
+        if not start:
+            return Response({"detail": "Set the active semester first."}, status=400)
+        dates = _working_dates(start, end)
+        if not dates:
+            return Response({"detail": "No working dates in the term."}, status=400)
+
+        # ---------- read the preference text (narrows the date pool) ----------
+        import re as _re
+        pref = (preference or "").lower()
+
+        # gap: from the stepper, overridden by "3 day gap" in the text
+        try:
+            gap = int(request.data.get("gap", 2))
+        except (TypeError, ValueError):
+            gap = 2
+        gm = _re.search(r"(\d+)\s*days?\s*gap", pref)
+        gap_explicit = bool(gm)          # did the user actually type "N day gap"?
+        if gm:
+            gap = int(gm.group(1))
+        if gap < 1:
+            gap = 1
+
+        # session: from the dropdown, overridden by words
+        session = request.data.get("session", "FN")
+        if session not in ("FN", "AN"):
+            session = "FN"
+        if "afternoon" in pref or " an " in pref:
+            session = "AN"
+        elif "forenoon" in pref or "morning" in pref:
+            session = "FN"
+
+        # exams per day: "2 exams per day" / "each day have 2 exams" (only FN+AN -> max 2)
+        pm = _re.search(r"(\d+)\s*exams?\s*(?:per|a|each)\s*day", pref)
+        if not pm:
+            pm = _re.search(r"(?:per|each|a)\s*day\s*(?:have|has|with|having)?\s*(\d+)\s*exam", pref)
+        asked_per_day = int(pm.group(1)) if pm else 1
+        per_day = max(1, min(2, asked_per_day))
+
+        # start month: if a month is named, begin from its first working day
+        months = {"january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+                  "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12}
+        start_from = None
+        requested_start = None      # the exact day the admin asked for (before snapping)
+        for name, num in months.items():
+            if name in pref:
+                # specific day? "august 8" or "8 august"
+                dm = _re.search(name + r"\s+(\d{1,2})", pref) or _re.search(r"(\d{1,2})\s+" + name, pref)
+                month_dates = [d for d in dates if d.month == num]
+                if dm and month_dates:
+                    day = int(dm.group(1))
+                    try:
+                        requested_start = datetime.date(month_dates[0].year, num, day)
+                        start_from = next((d for d in dates if d >= requested_start), None)
+                    except ValueError:
+                        start_from = month_dates[0]
+                else:
+                    start_from = next((d for d in dates if d.month == num), None)
+                break
+
+        pool = dates
+        if start_from:
+            pool = [d for d in dates if d >= start_from]
+
+        # "within N days" or "within N weeks" -> limit the window from the first date
+        window_limit = None              # the date the user's window caps at
+        wm = _re.search(r"within\s*(\d+)\s*day", pref)
+        wwm = _re.search(r"within\s*(\d+)\s*week", pref)
+        window_days = None
+        if wm:
+            window_days = int(wm.group(1))
+        elif wwm:
+            window_days = int(wwm.group(1)) * 7
+        if window_days is not None and pool:
+            window_limit = pool[0] + datetime.timedelta(days=window_days)
+            pool = [d for d in pool if d <= window_limit]
+
+        if not pool:
+            pool = dates  # safety: never empty
+
+        # ---- Option C: honor an explicitly typed gap; auto-fit otherwise ----
+        notes = []
+        if asked_per_day > 2:
+            notes.append(f"Only 2 exams per day are possible (one FN + one AN) — capped from {asked_per_day}.")
+
+        # how many distinct exam-days we need (2 subjects share a day when per_day=2)
+        num_exam_days = (len(subjects) + per_day - 1) // per_day
+        need = (num_exam_days - 1) * gap + 1     # working days this schedule spans
+
+        if gap_explicit:
+            # user typed "N day gap" -> keep it. If it needs more room than the
+            # current window, extend the pool with more working days (up to the term end).
+            if len(pool) < need:
+                start0 = pool[0]
+                extended = [d for d in dates if d >= start0][:need]
+                if window_limit and extended and extended[-1] > window_limit:
+                    notes.append(
+                        f"{gap}-day gap needs {len(extended)} working days — "
+                        f"the window was extended past your limit to fit all {len(subjects)} exams."
+                    )
+                pool = extended if extended else pool
+        else:
+            # no explicit gap -> safe to shrink so everything fits the window
+            if len(pool) > 1 and num_exam_days > 1:
+                max_gap = max(1, (len(pool) - 1) // (num_exam_days - 1))
+                if gap > max_gap:
+                    gap = max_gap
+
+        gap_note = " ".join(notes) if notes else None
+
+        # ---------- arrange: AI branch or regex branch ----------
+        ai_note = None
+        if mode == "ai":
+            try:
+                raw = _ai_arrange(subjects, pool, preference, session=session)
+            except Exception as e:
+                # AI failed — fall back to regex so we NEVER return an empty/June draft
+                raw = _auto_arrange(subjects, pool, gap=gap, session=session, per_day=per_day)
+                ai_note = f"AI unavailable, used auto-arrange. ({e})"
+        else:
+            raw = _auto_arrange(subjects, pool, gap=gap, session=session, per_day=per_day)
+
+        # ---------- validate against the POOL (not all dates) — blocks June ----------
+        valid_ids   = {s.id for s in subjects}
+        valid_dates = {d.isoformat() for d in pool}
+        rows = []
+        for r in raw:
+            if r.get("subject") in valid_ids and r.get("exam_date") in valid_dates:
+                rows.append({
+                    "subject":   r["subject"],
+                    "exam_date": r["exam_date"],
+                    "session":   r["session"] if r.get("session") in ("FN", "AN") else "FN",
+                })
+
+        # if AI dropped/duplicated subjects and left the draft incomplete, redo with regex
+        if mode == "ai" and len(rows) < len(subjects):
+            raw = _auto_arrange(subjects, pool, gap=gap, session=session, per_day=per_day)
+            rows = [{
+                "subject": r["subject"],
+                "exam_date": r["exam_date"],
+                "session": r["session"] if r.get("session") in ("FN", "AN") else "FN",
+            } for r in raw if r["subject"] in valid_ids and r["exam_date"] in valid_dates]
+            if ai_note is None:
+                ai_note = "AI returned an incomplete schedule, used auto-arrange."
+
+        actual_start = pool[0] if pool else None
+        return Response({
+            "draft": rows,
+            "ai_note": ai_note,
+            "gap_note": gap_note,
+            "requested_start": requested_start.isoformat() if requested_start else None,
+            "actual_start": actual_start.isoformat() if actual_start else None,
+        })   # NOT saved — just a draft
+
+
+# ===================== SCHEDULED CLASSES (overview) =====================
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def scheduled_classes(request):
+    """Every class that already has an exam schedule, with counts + date range."""
+    if not is_exam_admin(request.user):
+        return Response({"detail": "Only admin or exam admin."}, status=403)
+
+    from django.db.models import Count, Min, Max
+    rows = (
+        ExamSchedule.objects
+        .select_related("subject__year__course")
+        .values(
+            "semester",
+            "subject__year__year_number",
+            "subject__year__course_id",
+            "subject__year__course__name",
+        )
+        .annotate(count=Count("id"), first=Min("exam_date"), last=Max("exam_date"))
+        .order_by("subject__year__course__name", "subject__year__year_number", "semester")
+    )
+    data = [{
+        "course_id":   r["subject__year__course_id"],
+        "course_name": r["subject__year__course__name"],
+        "year":        r["subject__year__year_number"],
+        "semester":    r["semester"],
+        "count":       r["count"],
+        "first":       r["first"],
+        "last":        r["last"],
+    } for r in rows]
+    return Response(data)
+
 
 # ===================== REVALUATION ====================
 REVALUATION_FEE_TERM = "Revaluation Fee"

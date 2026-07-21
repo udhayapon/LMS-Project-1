@@ -9,6 +9,8 @@ const I = {
   file: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
   quiz: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
   bell: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+  check: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
+  clock: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
 };
 
 // attendance health color: green ≥75, amber 60–74, red below
@@ -36,6 +38,26 @@ function Ring({ pct, size = 116, stroke = 11 }) {
   );
 }
 
+// "09:00:00" -> "9:00 AM"  (same formatter the timetable uses)
+const fmtTime = (t) => {
+  if (!t) return "";
+  const [h, m] = String(t).split(":");
+  let hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? "PM" : "AM";
+  hour = hour % 12 || 12;
+  return `${hour}:${m} ${ampm}`;
+};
+
+// "HH:MM[:SS]" -> minutes since midnight
+const toMin = (t) => {
+  const [h, m] = String(t).split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+
+// local YYYY-MM-DD (matches the holiday date keys)
+const dayKey = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 export default function StudentHome() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const [open, setOpen] = useState(false);
@@ -50,7 +72,13 @@ export default function StudentHome() {
   const [attendance, setAttendance] = useState([]);   // per-subject: {subject, pct, present, total}
   const [attLoaded, setAttLoaded] = useState(false);
 
-  useEffect(() => { loadData(); loadAttendance(); }, []);
+  // timetable (for "Today's classes")
+  const [slots, setSlots] = useState([]);
+  const [entries, setEntries] = useState([]);
+  const [holidayName, setHolidayName] = useState(null);
+  const [ttLoaded, setTtLoaded] = useState(false);
+
+  useEffect(() => { loadData(); loadAttendance(); loadTimetable(); }, []);
 
   const loadData = async () => {
     try {
@@ -93,21 +121,18 @@ export default function StudentHome() {
   // ── Attendance: semester dates → records in range → group by subject ──
   const loadAttendance = async () => {
     try {
-      // 1) semester range (same source as the timetable builder)
       const semRes = await API.get("/semester/");
       const sem = (semRes.data || [])[0];
       if (!sem || !sem.start_date || !sem.end_date) {
-        setAttLoaded(true);   // no dates set → panel shows a quiet message
+        setAttLoaded(true);
         return;
       }
 
-      // 2) my attendance for that range
       const res = await API.get(
         `/attendance/?from_date=${sem.start_date}&to_date=${sem.end_date}`
       );
       const data = res.data?.results || res.data || [];
 
-      // 3) group by teaching assignment, tally present/total (same as course-wise report)
       const map = {};
       data.forEach((a) => {
         const key = a.teaching_assignment;
@@ -118,7 +143,7 @@ export default function StudentHome() {
 
       const rows = Object.values(map)
         .map((s) => ({ ...s, pct: s.total ? Math.round((s.present / s.total) * 100) : 0 }))
-        .sort((a, b) => a.pct - b.pct);   // lowest attendance first — most actionable
+        .sort((a, b) => a.pct - b.pct);
 
       setAttendance(rows);
       setAttLoaded(true);
@@ -128,17 +153,78 @@ export default function StudentHome() {
     }
   };
 
+  // ── Timetable: same endpoints the Timetable page uses ──
+  // /timeslots/  → [{ id, period_no, start_time, end_time, label, is_break }]
+  // /timetable/  → [{ day_of_week, time_slot, subject, teacher_name }]  (student sees own class)
+  // /holidays/   → [{ date, name }]
+  const loadTimetable = async () => {
+    try {
+      const [slotRes, ttRes, holRes] = await Promise.all([
+        API.get("/timeslots/"),
+        API.get("/timetable/"),
+        API.get("/holidays/"),
+      ]);
+      setSlots(slotRes.data || []);
+      setEntries(ttRes.data || []);
+
+      const k = dayKey(new Date());
+      const hol = (holRes.data || []).find((h) => h.date === k);
+      setHolidayName(hol ? hol.name : null);
+      setTtLoaded(true);
+    } catch (err) {
+      console.log("Timetable load error:", err);
+      setTtLoaded(true);
+    }
+  };
+
   const pendingAssignments = Math.max(assignments.length - submissions.length, 0);
   const pendingQuizzes = Math.max(quizzes.length - quizAttempts.length, 0);
   const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
   const fmt = (iso) => (iso ? new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "");
 
-  // overall attendance across all subjects
   const attTotals = attendance.reduce(
     (acc, s) => ({ present: acc.present + s.present, total: acc.total + s.total }),
     { present: 0, total: 0 }
   );
   const overallAtt = attTotals.total ? Math.round((attTotals.present / attTotals.total) * 100) : 0;
+
+  // ── build today's classes from the weekly pattern ──
+  const now = new Date();
+  const isSunday = now.getDay() === 0;
+  const wdToday = now.getDay() - 1; // Mon=0 .. Sat=5  (Sunday = -1)
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  const ttLookup = {};
+  entries.forEach((e) => { ttLookup[`${e.day_of_week}_${e.time_slot}`] = e; });
+
+  const allToday = (isSunday || holidayName)
+    ? []
+    : slots
+        .filter((s) => !s.is_break)
+        .map((s) => {
+          const e = ttLookup[`${wdToday}_${s.id}`];
+          if (!e) return null;
+          let status = "upcoming";
+          if (toMin(s.end_time) <= nowMin) status = "done";
+          else if (toMin(s.start_time) <= nowMin) status = "now";
+          return {
+            id: s.id,
+            period_no: s.period_no,
+            start: s.start_time,
+            end: s.end_time,
+            subject: e.subject,
+            teacher: e.teacher_name,
+            status,
+          };
+        })
+        .filter(Boolean);
+
+  // Show only a 3-class window: the one just finished, the current one, and the next.
+  let pivot = allToday.findIndex((c) => c.status === "now");
+  if (pivot === -1) pivot = allToday.findIndex((c) => c.status === "upcoming");
+  if (pivot === -1) pivot = allToday.length - 1;
+  const winStart = Math.min(Math.max(pivot - 1, 0), Math.max(allToday.length - 3, 0));
+  const todaysClasses = allToday.slice(winStart, winStart + 3);
 
   // Real activity timeline: merge submissions + quiz attempts, newest first
   const feed = [
@@ -152,8 +238,13 @@ export default function StudentHome() {
     })),
   ].sort((a, b) => new Date(b.t) - new Date(a.t)).slice(0, 6);
 
+  // KPI row LEADS with attendance — the number that actually matters.
   const kpis = [
-    { icon: "book", accent: "#0ea5e9", label: "Enrolled courses", value: courses.length, meta: "Active this semester" },
+    { icon: "check", accent: attLoaded && attTotals.total ? attColor(overallAtt) : "#10b981",
+      label: "Attendance", value: attLoaded ? (attTotals.total ? `${overallAtt}%` : "—") : "…",
+      chip: attLoaded && attTotals.total ? (overallAtt >= 75 ? "on track" : "low") : null,
+      chipTone: overallAtt >= 75 ? "ok" : "warn",
+      meter: attLoaded && attTotals.total ? overallAtt : undefined, m: attColor(overallAtt) },
     { icon: "file", accent: "#6366f1", label: "Assignments", value: `${submissions.length}/${assignments.length}`,
       chip: pendingAssignments > 0 ? `${pendingAssignments} pending` : "all submitted",
       chipTone: pendingAssignments > 0 ? "warn" : "ok", meter: pct(submissions.length, assignments.length), m: "#6366f1" },
@@ -174,7 +265,7 @@ export default function StudentHome() {
             <div className="sd-root">
 
               <h1 className="sd-hello">Welcome back, {user?.username || "Student"}</h1>
-              <p className="sd-sub">Here's where things stand today.</p>
+              <p className="sd-sub">Here's where things stand, and what's on today.</p>
 
               <div className="sd-kpis">
                 {kpis.map((k, i) => (
@@ -194,8 +285,53 @@ export default function StudentHome() {
               </div>
 
               <div className="sd-grid">
-                {/* LEFT: attendance (donut) + activity */}
+                {/* LEFT: today's classes + attendance + activity */}
                 <div className="sd-stack">
+
+                  {/* today's classes from the real timetable */}
+                  <div className="sd-panel">
+                    <div className="sd-pt">Today's classes</div>
+                    {!ttLoaded ? (
+                      <div className="sd-empty">Loading…</div>
+                    ) : isSunday || holidayName ? (
+                      <div className="sd-empty">
+                        {holidayName ? `Holiday — ${holidayName}.` : "No classes today. Enjoy your Sunday."}
+                      </div>
+                    ) : todaysClasses.length === 0 ? (
+                      <div className="sd-empty">No classes scheduled for today.</div>
+                    ) : (
+                      todaysClasses.map((c) => {
+                        const isNow = c.status === "now";
+                        const isDone = c.status === "done";
+                        const tint = isNow ? "#052098" : isDone ? "#98a2b3" : "#0ea5e9";
+                        const tag = isNow ? "now" : isDone ? "done" : `P${c.period_no}`;
+                        return (
+                          <div
+                            className="sd-frow"
+                            key={c.id}
+                            style={
+                              isNow
+                                ? { background: "#eef2ff", borderRadius: 10, margin: "4px -10px", padding: "12px 10px", border: "none" }
+                                : isDone
+                                ? { opacity: 0.55 }
+                                : undefined
+                            }
+                          >
+                            <div className="sd-node" style={{ background: tint + "18", color: tint }}>{I.clock}</div>
+                            <div className="sd-fmain">
+                              <div className="sd-ftitle">{c.subject || "Activity"}</div>
+                              <div className="sd-fsub">
+                                {fmtTime(c.start)}–{fmtTime(c.end)}{c.teacher ? ` · ${c.teacher}` : ""}
+                              </div>
+                            </div>
+                            <div className="sd-ftime" style={isNow ? { color: "#052098", fontWeight: 600 } : undefined}>
+                              {tag}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
 
                   {/* attendance — overall ring + per-subject rings */}
                   <div className="sd-panel">
@@ -206,7 +342,6 @@ export default function StudentHome() {
                       <div className="sd-empty">No attendance recorded yet this semester.</div>
                     ) : (
                       <div style={{ display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap" }}>
-                        {/* overall ring */}
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                           <Ring pct={overallAtt} size={124} stroke={12} />
                           <div style={{ fontSize: 12.5, fontWeight: 600, color: "#667085" }}>Overall</div>
@@ -215,7 +350,6 @@ export default function StudentHome() {
                           </div>
                         </div>
 
-                        {/* per-subject mini rings — 2 per row */}
                         <div style={{ flex: 1, minWidth: 240, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", columnGap: 18, rowGap: 16 }}>
                           {attendance.map((s, i) => (
                             <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>

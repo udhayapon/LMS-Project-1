@@ -4,7 +4,6 @@ import Sidebar from "../../components/Sidebar";
 import Navbar from "../../components/Navbar";
 
 import PeriodsPanel from "./PeriodsPanel";
-import HolidaysPanel from "./HolidaysPanel";
 import GridPanel from "./GridPanel";
 import ApprovalsPanel from "./ApprovalsPanel";
 
@@ -37,27 +36,20 @@ export default function TimetableBuilder() {
                 1 · Periods
               </button>
               <button
-                className={tab === "holidays" ? "active" : ""}
-                onClick={() => setTab("holidays")}
-              >
-                2 · Semester &amp; Holidays
-              </button>
-              <button
                 className={tab === "grid" ? "active" : ""}
                 onClick={() => setTab("grid")}
               >
-                3 · Timetable Builder
+                2 · Timetable Builder
               </button>
               <button
                 className={tab === "approvals" ? "active" : ""}
                 onClick={() => setTab("approvals")}
               >
-                4 · Approvals
+                3 · Approvals
               </button>
             </div>
 
             {tab === "periods" && <PeriodsPanel />}
-            {tab === "holidays" && <HolidaysPanel />}
             {tab === "grid" && <GridPanel goToPeriods={() => setTab("periods")} />}
             {tab === "approvals" && <ApprovalsPanel />}
           </div>

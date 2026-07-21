@@ -12,6 +12,10 @@ from .views import (
     generate_enrollments,
     generate_fees,
 
+     # ELECTIVES (student self-enrollment)
+    my_electives,
+    elective_enroll,
+
     # MAIN
     CourseViewSet,
     YearViewSet,
@@ -112,6 +116,10 @@ urlpatterns = [
     # ================= GENERATE ENROLLMENTS =================
     path('generate-enrollments/',generate_enrollments),
     path('generate-fees/', generate_fees),
+    # ================= ELECTIVES =================
+    path('my-electives/', my_electives),
+    path('elective-enroll/', elective_enroll),
+    
     path( 'my-progress/', my_progress),
     path('class-progress/',class_progress),
 

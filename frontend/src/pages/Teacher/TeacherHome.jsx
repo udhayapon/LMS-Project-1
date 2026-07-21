@@ -119,7 +119,9 @@ export default function TeacherHome() {
   ];
 
   const actions = [
-    { label: "My subjects", icon: "book", accent: "#0ea5e9", to: "/courses" },
+    // /courses is the ADMIN course-management page (full CRUD). Teachers must go
+    // to their own read-only subject list, same as the sidebar link.
+    { label: "My subjects", icon: "book", accent: "#0ea5e9", to: "/teacher/courses" },
     { label: "Take attendance", icon: "calendar", accent: "#10b981", to: "/teacher/attendance" },
     { label: "Class progress", icon: "chart", accent: "#6366f1", to: "/teacher-progress" },
     { label: "Messages", icon: "message", accent: "#8b5cf6", to: "/teacher/messages" },

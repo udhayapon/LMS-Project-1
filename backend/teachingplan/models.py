@@ -73,6 +73,14 @@ class PlanUnit(models.Model):
     complete_by = models.DateField(null=True, blank=True)
     sequence_no = models.PositiveIntegerField(default=1)
 
+    # Which period of the day this class hour is (1, 2, 3...).
+    # A subject can meet more than once on the same date, so complete_by alone does
+    # not identify a class — the pair (complete_by, period_no) does. Without this, a
+    # topic's period can only be guessed by counting its position in the class-day
+    # list, and that count shifts the moment a holiday is added.
+    # null=True because rows written before this migration have no period yet.
+    period_no = models.PositiveIntegerField(null=True, blank=True)
+
     # Filled in after the plan is approved, as the teacher logs progress.
     is_completed = models.BooleanField(default=False)
     actual_completed_date = models.DateField(null=True, blank=True)

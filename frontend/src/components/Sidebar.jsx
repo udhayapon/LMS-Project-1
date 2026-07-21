@@ -40,8 +40,8 @@ export default function Sidebar({ open, setOpen }) {
       { name: "Departments", path: "/departments" },
       { name: "User Management", path: "/users" },
       { name: "Courses", path: "/courses" },
-      { name: "Faculty Allocation", path: "/teaching-assignments" },
-      { name: "Enrollments", path: "/enrollments" },
+    //  { name: "Enrollments", path: "/enrollments" },
+      // Faculty Allocation moved to HODs (Step 5) — admin link removed
       { name: "Timetable Builder", path: "/timetable-builder" },
       { name: "Results", path: "/results" },
       { name: "Fee Management", path: "/admin/fees" },
@@ -74,8 +74,8 @@ export default function Sidebar({ open, setOpen }) {
     menu = [
       { name: "Departments", path: "/departments" },
       { name: "Courses", path: "/courses" },
-      { name: "Faculty Allocation", path: "/teaching-assignments" },
-      { name: "Enrollments", path: "/enrollments" },
+      // Faculty Allocation moved to HODs (Step 5) — admin link removed
+      //{ name: "Enrollments", path: "/enrollments" },
       { name: "Profile", path: "/profile" },
     ];
   }
@@ -96,9 +96,11 @@ export default function Sidebar({ open, setOpen }) {
       ...(isHod ? [
         { name: "My Department", path: "/my-department" },
         { name: "Plan Approvals", path: "/my-department/teaching-plans" },
+        { name: "Faculty Allocation", path: "/hod/allocation" },
       ] : []),
       ...(isTutor ? [{ name: "My Class", path: "/my-class" }] : []),
-      { name: "My Subjects", path: "/courses" },
+      // teachers get their OWN subjects page — /courses is the admin course editor
+      { name: "My Subjects", path: "/teacher/courses" },
       { name: "Timetable", path: "/timetable" },
       { name: "My Teaching Plan", path: "/teacher/teaching-plan" },
       { name: "Attendance", path: "/teacher/attendance" },
@@ -116,8 +118,8 @@ export default function Sidebar({ open, setOpen }) {
     menu = [
       { name: "Dashboard", path: "/student" },
       { name: "My Subjects", path: "/student/courses" },
+      { name: "Electives", path: "/student/electives" },
       { name: "Timetable", path: "/timetable" },
-      { name: "Teaching Plan", path: "/student/teaching-plan" },
       { name: "Attendance", path: "/student/attendance" },
       { name: "Grades", path: "/student/grades" },
       { name: "Results", path: "/results" },
@@ -143,19 +145,30 @@ export default function Sidebar({ open, setOpen }) {
   }
 
   // active check — keeps the "Courses" / "My Subjects" item highlighted while
-  // on a course detail or course structure page (/courses/:id and /courses/:id/structure)
+  // on a detail page belonging to it
   const isActive = (itemPath) => {
 
     if (location.pathname === itemPath) {
       return true;
     }
 
+    // admin / academic admin: /courses/:id and /courses/:id/structure
     if (location.pathname.startsWith("/courses/")) {
+      if (itemPath === "/courses") {
+        return true;
+      }
+    }
 
-      if (
-        itemPath === "/courses" ||
-        itemPath === "/student/courses"
-      ) {
+    // teacher: /teacher/subject/:id belongs to "My Subjects"
+    if (location.pathname.startsWith("/teacher/subject/")) {
+      if (itemPath === "/teacher/courses") {
+        return true;
+      }
+    }
+
+    // student: /student/subject/:id belongs to "My Subjects"
+    if (location.pathname.startsWith("/student/subject/")) {
+      if (itemPath === "/student/courses") {
         return true;
       }
     }

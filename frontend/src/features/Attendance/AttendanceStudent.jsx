@@ -46,6 +46,7 @@ export default function AttendanceStudent() {
   const [dailyData, setDailyData] = useState([]);
   const [dailyRaw, setDailyRaw]   = useState([]);
   const [dailyLoading, setDailyLoading] = useState(false);
+  const [semStart, setSemStart]   = useState("");   // cached semester start for the default range
 
   const [cwFrom, setCwFrom]               = useState("");
   const [cwTo, setCwTo]                   = useState("");
@@ -118,6 +119,28 @@ export default function AttendanceStudent() {
     loadSummary();
   }, []);
 
+  // ── default Daily view: auto-load the whole semester so the table is populated on open ──
+  useEffect(() => {
+    const loadDefaultRange = async () => {
+      try {
+        const semRes = await API.get("/semester/");
+        const sem = (semRes.data || [])[0];
+        const today = new Date().toISOString().slice(0, 10);
+        const start = sem?.start_date || "";
+        if (start) {
+          setSemStart(start);
+          setFromDate(start);
+          setToDate(today);
+          runDaily(start, today);   // populate immediately — no click needed
+        }
+      } catch (err) {
+        console.error("Default range load error:", err);
+      }
+    };
+    loadDefaultRange();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── On Duty: load my requests ──
   const loadOd = async () => {
     setOdLoading(true);
@@ -180,11 +203,12 @@ export default function AttendanceStudent() {
     return found.length ? found : [1, 2, 3, 4, 5, 6, 7, 8];
   };
 
-  const fetchDaily = async () => {
-    if (!fromDate || !toDate) return alert("Please select both From Date and To Date.");
+  // core fetch — takes explicit dates so it can run on mount before state settles
+  const runDaily = async (f, t) => {
+    if (!f || !t) return;
     setDailyLoading(true);
     try {
-      const res  = await API.get(`/attendance/?from_date=${fromDate}&to_date=${toDate}`);
+      const res  = await API.get(`/attendance/?from_date=${f}&to_date=${t}`);
       const data = res.data?.results || res.data || [];
       setDailyRaw(data);
       const grouped = {};
@@ -197,7 +221,23 @@ export default function AttendanceStudent() {
     finally { setDailyLoading(false); }
   };
 
-  const resetDaily = () => { setFromDate(""); setToDate(""); setDailyData([]); setDailyRaw([]); };
+  // Search button — uses whatever is in the pickers (a custom narrower range)
+  const fetchDaily = () => {
+    if (!fromDate || !toDate) return alert("Please select both From Date and To Date.");
+    runDaily(fromDate, toDate);
+  };
+
+  // Reset returns to the full-semester view rather than a blank screen
+  const resetDaily = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (semStart) {
+      setFromDate(semStart);
+      setToDate(today);
+      runDaily(semStart, today);
+    } else {
+      setFromDate(""); setToDate(""); setDailyData([]); setDailyRaw([]);
+    }
+  };
 
   const fetchCourseWise = async () => {
     if (!cwFrom || !cwTo) return alert("Please select both From Date and To Date.");
@@ -384,7 +424,7 @@ export default function AttendanceStudent() {
                       <input className="att-input att-input-date" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
                     </div>
                     <div className="att-btn-row">
-                      <button className="att-btn-primary" onClick={fetchDaily}>
+                      <button className="att-btn-primary" onClick={() => fetchDaily()}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
                           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                         </svg>
@@ -407,7 +447,7 @@ export default function AttendanceStudent() {
                   {dailyLoading ? (
                     <div className="att-state"><div className="att-spinner" /><p>Loading…</p></div>
                   ) : dailyData.length === 0 ? (
-                    <div className="att-state"><p>Select a date range and click Search to view attendance.</p></div>
+                    <div className="att-state"><p>No attendance records found for this range. Try a different date range.</p></div>
                   ) : (
                     <>
                       <p className="att-rule-note">

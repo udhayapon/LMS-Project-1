@@ -7,6 +7,8 @@ import "../../styles/TeachingPlans.css";
 
 const ORDER = { pending: 0, behind: 1, rejected: 2, ontrack: 3, approved: 4 };
 
+const PREVIEW_COUNT = 5;
+
 // status -> tint class (used for avatars, pills, badges)
 const TINT_CLASS = {
   pending: "tp-tint--blue",
@@ -113,7 +115,9 @@ export default function HODTeachingPlans() {
     try {
       await API.post(`teaching-plans/${sel.id}/${action}/`, { comment: cmt });
     } catch { /* demo mode */ }
-    setPlans((prev) => prev.map((p) => (p.id === sel.id ? { ...p, status: newStatus, comment: cmt } : p)));
+    // NOTE: the decided footer below reads sel.hod_comment — keep the field name
+    // the same here or the comment silently fails to render on re-open.
+    setPlans((prev) => prev.map((p) => (p.id === sel.id ? { ...p, status: newStatus, hod_comment: cmt } : p)));
     flash(action === "approve" ? `Plan approved — published to ${sel.cls}` : `Plan sent back to ${sel.teacher} for revision`);
     backToList();
   };
@@ -124,7 +128,8 @@ export default function HODTeachingPlans() {
     const total = units.reduce((a, u) => a + (Number(u.hours) || 0), 0);
     const hoursMod = total > sel.allotted ? "over" : total < sel.allotted ? "under" : "match";
     const initials = sel.initials || "?";
-    const shown = showAll ? units : units.slice(0, 4);
+    const shown = showAll ? units : units.slice(0, PREVIEW_COUNT);
+    const hidden = units.length - shown.length;
 
     const badgeLabel = {
       pending: "Pending review",
@@ -164,14 +169,14 @@ export default function HODTeachingPlans() {
                     </div>
                   </div>
                   <div className="tp-stat">
-                    <div className="tp-stat-label">Topics</div>
-                    <div className="tp-stat-value">{units.length} units</div>
+                    <div className="tp-stat-label">Class days</div>
+                    <div className="tp-stat-value">{units.length} classes</div>
                   </div>
                 </div>
 
                 <div className="tp-units">
                   <div className="tp-units-head">
-                    <div className="tp-units-title">Topic units</div>
+                    <div className="tp-units-title">Topic for each class</div>
                     <div className="tp-units-count">showing {shown.length} of {units.length}</div>
                   </div>
 
@@ -185,12 +190,15 @@ export default function HODTeachingPlans() {
                         </div>
                       </div>
                     ))}
-                    {units.length > 4 && (
-                      <div className="tp-units-toggle" onClick={() => setShowAll((v) => !v)}>
-                        {showAll ? "Show fewer" : `Show all ${units.length} topics`}
-                      </div>
-                    )}
                   </div>
+
+                  {/* toggle sits OUTSIDE the scroll box — otherwise it scrolls
+                      out of sight the moment the list is expanded */}
+                  {units.length > PREVIEW_COUNT && (
+                    <div className="tp-units-toggle" onClick={() => setShowAll((v) => !v)}>
+                      {showAll ? "Show fewer" : `Show all ${units.length} classes (${hidden} more)`}
+                    </div>
+                  )}
                 </div>
 
                 {sel.status === "pending" ? (

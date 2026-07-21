@@ -5,13 +5,14 @@ from "react-router-dom";
 import Login from "./pages/Login";
 import Profile from "./pages/Profile";
 import Notifications from "./pages/Notifications";
+import ChangePassword from "./pages/ChangePassword";
 
 // ===== COMMON FEATURES =====
 import Courses from "./features/courses/Courses";
 import CourseDetails from "./features/courses/CourseDetails";
 import CourseStructure from "./features/courses/CourseStructure";
 import Years from "./features/years/Years";
-import Subjects from "./features/subjects/Subjects";
+//import Subjects from "./features/subjects/Subjects";
 import TeachingAssignments from "./features/teaching/TeachingAssignments";
 import FeedbackHistory from "./features/feedback/FeedbackHistory";
 // ===== TIMETABLE =====
@@ -29,16 +30,12 @@ import Announcements from "./features/announcements/Announcements";
 // ===== ADMIN =====
 import Dashboard from "./pages/Admin/Dashboard";
 import UserManagement from "./pages/Admin/UserManagement";
-import Students from "./pages/Admin/Students";
-import Teachers from "./pages/Admin/Teachers";
-import AdminUsers from "./pages/Admin/AdminUsers";
-import Parents from "./pages/Admin/Parents";
-
 import Enrollments from "./pages/Admin/Enrollments";
 import Departments from "./pages/Admin/Departments";
 
 // ===== TEACHER =====
 import TeacherHome from "./pages/Teacher/TeacherHome";
+import TeacherCourses from "./pages/Teacher/TeacherCourses";
 import SubjectDetails from "./pages/Teacher/SubjectDetails";
 import TeacherChat from "./pages/Teacher/TeacherChat";
 
@@ -51,10 +48,11 @@ import StudentCourses from "./pages/Student/StudentCourses";
 import StudentSubjectDetails from "./pages/Student/StudentSubjectDetails";
 import StudentGrades from "./pages/Student/StudentGrades";
 import StudentTeachingPlan from "./features/teachingplan/StudentTeachingPlan";
+import ElectiveEnroll from "./features/courses/ElectiveEnroll";
 
 // ===== PARENT =====
 import ParentDashboard from "./pages/Parent/ParentDashboard";
-import ParentAttendance from "./features/Attendance/ParentAttendance";
+import ParentAttendance from "./features/attendance/ParentAttendance";
 import ParentAssignments from "./features/assignments/ParentAssignments";
 import ParentFees from "./features/fees/ParentFees";
 import ParentGrades from "./pages/Parent/ParentGrades";
@@ -62,6 +60,7 @@ import ParentChat from "./pages/Parent/ParentChat";
 import ParentMessage from "./pages/Parent/ParentMessage";
 
 import HODDepartment from "./features/hod/HODDepartment";
+import HodAllocation from "./features/hod/HodAllocation";
 import MyClass from "./features/tutor/MyClass";
 import TeacherTeachingPlan from "./features/teachingplan/TeacherTeachingPlan";
 import HODTeachingPlan from "./features/teachingplan/HODTeachingPlan";
@@ -189,59 +188,39 @@ function App() {
         {/* ===== AFTER LOGIN ===== */}
         <Route path="/home" element={<RoleRedirect />} />
 
-        {/* ================= COMMON ================= */}
+        {/* ================= COURSES (admin + academic admin only) ================= */}
+        {/* Teachers use /teacher/courses (their own subjects), NOT this admin
+            course editor. Students use /student/courses. */}
 
-        <Route path="/courses" element={  <ProtectedRoute> <Courses /> </ProtectedRoute> }/>
-        <Route path="/courses/:id" element={ <ProtectedRoute> <CourseDetails /> </ProtectedRoute> }/>
-        <Route path="/courses/:id/structure" element={ <ProtectedRoute> <CourseStructure /> </ProtectedRoute> }/>
+        <Route path="/courses" element={ <ProtectedRoute roles={["admin", "academic_admin"]}> <Courses /> </ProtectedRoute> }/>
+        <Route path="/courses/:id" element={ <ProtectedRoute roles={["admin", "academic_admin"]}> <CourseDetails /> </ProtectedRoute> }/>
+        <Route path="/courses/:id/structure" element={ <ProtectedRoute roles={["admin", "academic_admin"]}> <CourseStructure /> </ProtectedRoute> }/>
 
         {/* ================= ADMIN ================= */}
 
         <Route path="/dashboard" element={ <ProtectedRoute adminOnly={true}> <Dashboard /></ProtectedRoute> }/>
         <Route path="/users" element={ <ProtectedRoute adminOnly={true}> <UserManagement /> </ProtectedRoute> } />
-        {/* ================= STUDENTS ================= */}
-        <Route path="/students" element={ <ProtectedRoute adminOnly={true}> <Students /> </ProtectedRoute>} />
 
-        {/* ================= TEACHERS ================= */}
-        <Route path="/teachers" element={  <ProtectedRoute adminOnly={true}> <Teachers />  </ProtectedRoute>  }/>
-
-        {/* ================= ADMINS ================= */}
-        <Route
-          path="/admins"
-          element={
-            <ProtectedRoute
-              adminOnly={true}
-            >
-
-              <AdminUsers />
-
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-  path="/parents-admin"
-  element={
-    <ProtectedRoute adminOnly={true}>
-      <Parents />
-    </ProtectedRoute>
-  }
-/>
 
         {/* ================= ENROLLMENTS ================= */}
-        <Route path="/enrollments" element={ <ProtectedRoute roles={["admin", "academic_admin"]} > <Enrollments /></ProtectedRoute> }/>
+    
+        <Route path="/enrollments" element={ <ProtectedRoute adminOnly={true}> <Enrollments /></ProtectedRoute> }/>
 
         {/* ================= YEARS ================= */}
         <Route path="/years" element={ <ProtectedRoute adminOnly={true} > <Years /> </ProtectedRoute>} />
 
-        {/* ================= SUBJECTS ================= */}
-        <Route path="/subjects" element={ <ProtectedRoute adminOnly={true}> <Subjects /> </ProtectedRoute>}/>
+        {/* ================= SUBJECTS ================= 
+        <Route path="/subjects" element={ <ProtectedRoute adminOnly={true}> <Subjects /> </ProtectedRoute>}/> */}
 
         {/* ================= TEACHING ASSIGNMENTS ================= */}
-        <Route path="/teaching-assignments" element={ <ProtectedRoute roles={["admin", "academic_admin"]}><TeachingAssignments /></ProtectedRoute> }/>
+        {/* Faculty allocation moved to HODs (Step 5). Kept reachable by the main
+            admin only, as a fallback for departments with no HOD assigned yet.
+            No sidebar link — reachable by direct URL only. */}
+        <Route path="/teaching-assignments" element={ <ProtectedRoute adminOnly={true}><TeachingAssignments /></ProtectedRoute> }/>
         <Route path="/teacher/attendance" element={<ProtectedRoute role="teacher"><AttendanceTeacher /></ProtectedRoute>} />
         <Route path="/student/attendance" element={<ProtectedRoute role="student"><AttendanceStudent /></ProtectedRoute>} />
         <Route path="/results" element={<ProtectedRoute><Results /></ProtectedRoute>} />
+        <Route path="/student/electives" element={ <ProtectedRoute role="student"> <ElectiveEnroll /> </ProtectedRoute> }/>
 
         {/* ================= DEPARTMENTS ================= */}
         <Route path="/departments" element={ <ProtectedRoute roles={["admin", "academic_admin"]} ><Departments /></ProtectedRoute> }/>
@@ -249,6 +228,7 @@ function App() {
         {/* ================= TEACHER ================= */}
 
         <Route path="/teacher" element={ <ProtectedRoute role="teacher"> <TeacherHome /></ProtectedRoute> }/>
+        <Route path="/teacher/courses" element={ <ProtectedRoute role="teacher"> <TeacherCourses /> </ProtectedRoute> }/>
         <Route path="/teacher/subject/:id" element={ <ProtectedRoute role="teacher"><SubjectDetails /></ProtectedRoute>}/>
         <Route path="/teacher-progress" element={ <ProtectedRoute role="teacher"> <TeacherProgress /></ProtectedRoute>}/>
         <Route path="/teacher/messages" element={ <ProtectedRoute role="teacher"> <TeacherChat /> </ProtectedRoute> }/>
@@ -305,16 +285,8 @@ function App() {
 
         {/* ================= NOTIFICATIONS ================= */}
 
-        <Route
-          path="/notifications"
-          element={
-            <ProtectedRoute>
-
-              <Notifications />
-
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/notifications" element={ <ProtectedRoute> <Notifications /> </ProtectedRoute>  }/>
+        <Route path="/change-password" element={ <ProtectedRoute> <ChangePassword /> </ProtectedRoute> } />
 
         {/* ================= TIMETABLE ================= */}
         <Route
@@ -344,8 +316,23 @@ function App() {
         <Route path="/parent/chat" element={ <ProtectedRoute role="parent"> <ParentChat /> </ProtectedRoute>}/>
         <Route path="/parent/messages" element={ <ProtectedRoute role="parent"> <ParentMessage /> </ProtectedRoute>}/>
         <Route path="/admin/fees" element={<ProtectedRoute roles={["admin", "accounts_admin"]}> <AdminFees /> </ProtectedRoute>} />
-        <Route path="/my-department" element={<HODDepartment />} />
-        <Route path="/my-class" element={<MyClass />} />
+        <Route path="/my-department" element={<ProtectedRoute role="teacher">  <HODDepartment /> </ProtectedRoute> }/>
+        <Route
+  path="/my-class"
+  element={
+    <ProtectedRoute role="teacher">
+      <MyClass />
+    </ProtectedRoute>
+  }
+/>
+        <Route
+              path="/hod/allocation"
+              element={
+                <ProtectedRoute role="teacher">
+                  <HodAllocation />
+                </ProtectedRoute>
+              }
+            />
 
         {/* ================= IQAC DASHBOARD ================= */}
         <Route path="/iqac" element={<ProtectedRoute role="iqac_admin"> <IqacDashboard /> </ProtectedRoute>} />

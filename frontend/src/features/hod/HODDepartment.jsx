@@ -196,14 +196,14 @@ export default function HODDepartment() {
                   )}
 
                   {/* ===== TABS ===== */}
-                  <div className="sd-seg" style={{ marginBottom: 22 }}>
-                    <button className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>Overview</button>
-                    <button className={tab === "results" ? "on" : ""} onClick={() => setTab("results")}>Results</button>
-                    <button className={tab === "timetable" ? "on" : ""} onClick={() => setTab("timetable")}>Timetable</button>
-                    <button className={tab === "teachers" ? "on" : ""} onClick={() => setTab("teachers")}>Faculty</button>
-                    <button className={tab === "students" ? "on" : ""} onClick={() => setTab("students")}>Students</button>
-                    <button className={tab === "tutors" ? "on" : ""} onClick={() => setTab("tutors")}>Tutors</button>
-                    <button className={tab === "onduty" ? "on" : ""} onClick={() => setTab("onduty")}>On Duty</button>
+                  <div className="tabs" style={{ marginBottom: 22, flexWrap: "wrap" }}>
+                    <button className={tab === "overview" ? "btn-primary" : ""} onClick={() => setTab("overview")}>Overview</button>
+                    <button className={tab === "results" ? "btn-primary" : ""} onClick={() => setTab("results")}>Results</button>
+                    <button className={tab === "timetable" ? "btn-primary" : ""} onClick={() => setTab("timetable")}>Timetable</button>
+                    <button className={tab === "teachers" ? "btn-primary" : ""} onClick={() => setTab("teachers")}>Faculty</button>
+                    <button className={tab === "students" ? "btn-primary" : ""} onClick={() => setTab("students")}>Students</button>
+                    <button className={tab === "tutors" ? "btn-primary" : ""} onClick={() => setTab("tutors")}>Tutors</button>
+                    <button className={tab === "onduty" ? "btn-primary" : ""} onClick={() => setTab("onduty")}>On Duty</button>
                   </div>
 
                   {/* ===== OVERVIEW ===== */}

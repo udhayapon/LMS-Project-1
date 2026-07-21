@@ -4,11 +4,17 @@ import Sidebar from "../../components/Sidebar";
 import API from "../../api";
 import "../../App.css";
 
+// ================= DESIGN TOKENS (match App.css) =================
+const BRAND = "#2848d8";
+const INK = "#0f172a";
+const MUTED = "#64748b";
+const LINE = "#e8edf3";
+
 const AUD_COLOR = {
-  everyone: "#2563eb",
-  students: "#16a34a",
+  everyone: BRAND,
+  students: "#15803d",
   teachers: "#b45309",
-  parents:  "#9333ea",
+  parents:  "#7c3aed",
 };
 const AUD_LABEL = {
   everyone: "Everyone",
@@ -97,13 +103,13 @@ export default function Announcements() {
                   <span style={{ ...S.badge, background: accent + "1a", color: accent }}>
                     {AUD_LABEL[a.audience] || "Everyone"}
                   </span>
-                  <span style={{ fontSize: 17, fontWeight: 700, color: "#0f172a", flex: 1 }}>{a.title}</span>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: INK, flex: 1 }}>{a.title}</span>
                   {canPost && (
-                    <button style={S.del} onClick={() => remove(a.id)}>Delete</button>
+                    <button className="btn-delete" onClick={() => remove(a.id)}>Delete</button>
                   )}
                 </div>
                 <div style={{ fontSize: 14, color: "#334155", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{a.message}</div>
-                <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 12 }}>
+                <div style={{ fontSize: 12.5, color: "#94a3b8", marginTop: 12 }}>
                   {a.posted_by_name ? `Posted by ${a.posted_by_name}` : "Posted"} · {fmtDate(a.created_at)}
                 </div>
               </div>
@@ -121,50 +127,54 @@ export default function Announcements() {
         <Sidebar open={open} setOpen={setOpen} />
         <div className="main">
           <div className="content">
-            <div style={{ width: "100%", padding: "8px 4px" }}>
 
-              <div style={{ marginBottom: 20 }}>
-                <h1 style={{ fontSize: 30, fontWeight: 800, margin: 0, color: "#0f172a" }}>Announcements</h1>
-                <p style={{ color: "#64748b", fontSize: 15, marginTop: 4 }}>
-                  {canPost ? "Post updates and choose who each one is for." : "Latest updates from the college."}
-                </p>
-              </div>
-
-              {/* side-by-side for posters: form left, board right */}
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: canPost ? "minmax(0,340px) minmax(0,1fr)" : "1fr",
-                gap: 20, alignItems: "start",
-              }}>
-
-                {canPost && (
-                  <div style={S.card}>
-                    <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 14px", color: "#0f172a" }}>New Announcement</h3>
-
-                    <label style={S.label}>Title</label>
-                    <input style={S.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Fee payment due date" />
-
-                    <label style={S.label}>Message</label>
-                    <textarea style={{ ...S.input, minHeight: 100, resize: "vertical" }} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Write the announcement…" />
-
-                    <label style={S.label}>Who is this for?</label>
-                    <select style={S.input} value={audience} onChange={(e) => setAudience(e.target.value)}>
-                      <option value="everyone">Everyone</option>
-                      <option value="students">Students</option>
-                      <option value="teachers">Teachers</option>
-                      <option value="parents">Parents</option>
-                    </select>
-
-                    <button style={S.btn} onClick={post} disabled={posting}>
-                      {posting ? "Posting…" : "Post & Notify"}
-                    </button>
-                  </div>
-                )}
-
-                <div>{board}</div>
-              </div>
-
+            {/* ── HEADER ── */}
+            <div className="header-box">
+              <h2>Announcements</h2>
+              <p>
+                {canPost ? "Post updates and choose who each one is for." : "Latest updates from the college."}
+              </p>
             </div>
+
+            {/* side-by-side for posters: form left, board right */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: canPost ? "minmax(0,340px) minmax(0,1fr)" : "1fr",
+              gap: 18, alignItems: "start",
+            }}>
+
+              {canPost && (
+                <div style={S.card}>
+                  <h3 style={{ fontSize: 17, fontWeight: 600, margin: "0 0 15px", color: INK }}>New announcement</h3>
+
+                  <label style={S.label}>Title</label>
+                  <input style={S.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Fee payment due date" />
+
+                  <label style={S.label}>Message</label>
+                  <textarea style={{ ...S.input, minHeight: 100, resize: "vertical" }} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Write the announcement…" />
+
+                  <label style={S.label}>Who is this for?</label>
+                  <select style={S.input} value={audience} onChange={(e) => setAudience(e.target.value)}>
+                    <option value="everyone">Everyone</option>
+                    <option value="students">Students</option>
+                    <option value="teachers">Teachers</option>
+                    <option value="parents">Parents</option>
+                  </select>
+
+                  <button
+                    className="btn-primary"
+                    onClick={post}
+                    disabled={posting}
+                    style={{ width: "100%", marginTop: 16, padding: "11px 16px", opacity: posting ? 0.65 : 1 }}
+                  >
+                    {posting ? "Posting…" : "Post & notify"}
+                  </button>
+                </div>
+              )}
+
+              <div>{board}</div>
+            </div>
+
           </div>
         </div>
       </div>
@@ -173,10 +183,8 @@ export default function Announcements() {
 }
 
 const S = {
-  card:  { background: "#fff", border: "1px solid #eef2f7", borderRadius: 14, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" },
-  label: { display: "block", fontSize: 13, color: "#64748b", marginBottom: 5, marginTop: 12, fontWeight: 500 },
-  input: { width: "100%", border: "1px solid #e2e8f0", borderRadius: 10, padding: "11px 12px", fontSize: 14, background: "#f8fafc", outline: "none", fontFamily: "inherit", boxSizing: "border-box" },
-  btn:   { width: "100%", background: "#2563eb", color: "#fff", border: "none", borderRadius: 10, padding: 13, fontSize: 15, fontWeight: 600, cursor: "pointer", marginTop: 16 },
-  badge: { fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20 },
-  del:   { background: "none", border: "none", color: "#cbd5e1", cursor: "pointer", fontSize: 13 },
+  card:  { background: "#fff", border: `1px solid ${LINE}`, borderRadius: 14, padding: 22, boxShadow: "0 1px 3px rgba(16,24,40,0.04)" },
+  label: { display: "block", fontSize: 12.5, color: MUTED, marginBottom: 6, marginTop: 12, fontWeight: 500 },
+  input: { width: "100%", border: "1px solid #e2e8f0", borderRadius: 9, padding: "10px 12px", fontSize: 14, background: "#fff", outline: "none", fontFamily: "inherit", boxSizing: "border-box", color: "#1e293b" },
+  badge: { fontSize: 11.5, fontWeight: 500, padding: "3px 11px", borderRadius: 999 },
 };

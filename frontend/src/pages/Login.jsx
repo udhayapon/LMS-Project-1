@@ -43,6 +43,12 @@ function Login() {
         const role = (data.role || "").toLowerCase();
         const subRole = (data.sub_role || "").toLowerCase();
 
+        // first-login users must set a new password before anything else
+        if (data.must_change_password === true) {
+          navigate("/change-password");
+          return;
+        }
+
         // superuser -> always the main admin dashboard
         if (data.is_superuser === true) {
           navigate("/dashboard");

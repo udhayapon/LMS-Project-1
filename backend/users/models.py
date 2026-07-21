@@ -93,6 +93,9 @@ class User(AbstractUser):
         blank=True,
         null=True
     )
+    # ================= FORCE PASSWORD CHANGE ON FIRST LOGIN =================
+    # Set to True for auto-created parents so they must set a new password.
+    must_change_password = models.BooleanField(default=False)
 
     # ================= DEPARTMENT =================
     department = models.ForeignKey(
@@ -326,9 +329,7 @@ class ParentProfile(models.Model):
 
 
 # ================= FACULTY PARTICIPATION (IQAC) =================
-# One row per activity a teacher records for NAAC/IQAC.
-# The teacher fills this in and uploads a proof file.
-# The IQAC admin only views and counts these — there is no approve/reject.
+
 class FacultyParticipation(models.Model):
 
     # what kind of activity it was

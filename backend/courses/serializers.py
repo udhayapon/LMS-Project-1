@@ -26,11 +26,15 @@ class SubjectSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
+    department_name = serializers.CharField(
+        source='department.name',
+        read_only=True
+    )
+
     class Meta:
         model = Subject
 
-        fields = ['id', 'name', 'code', 'credits', 'year', 'semester', 'year_number', 'course_name']
-
+        fields = ['id', 'name', 'code', 'credits', 'weekly_hours','is_elective','year', 'semester', 'year_number', 'course_name', 'department', 'department_name']
 # ===================== YEAR =====================
 class YearSerializer(serializers.ModelSerializer):
 

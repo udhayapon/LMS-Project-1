@@ -6,6 +6,14 @@ import "../../App.css";
 import Sidebar from "../../components/Sidebar";
 import Navbar from "../../components/Navbar";
 
+// ================= DESIGN TOKENS (match App.css) =================
+const BRAND = "#2848d8";
+const BRAND_DARK = "#1e3ac0";
+const INK = "#0f172a";
+const MUTED = "#64748b";
+const LINE = "#e8edf3";
+const HAIR = "#f1f5f9";
+
 // ================= HELPERS =================
 const money = (n) => "₹" + Number(n || 0).toLocaleString("en-IN");
 const ini = (name) =>
@@ -22,23 +30,53 @@ function getStatus(fee) {
 const STATUS_ORDER = ["overdue", "pending", "paid"];
 
 const SM = {
-  paid:    { label: "Paid",    bg: "#dcfce7", color: "#166534", bar: "#16a34a" },
-  pending: { label: "Pending", bg: "#fef3c7", color: "#92400e", bar: "#f59e0b" },
-  overdue: { label: "Overdue", bg: "#fee2e2", color: "#b91c1c", bar: "#ef4444" },
+  paid:    { label: "Paid",    bg: "#ecfdf3", color: "#15803d", bar: "#16a34a" },
+  pending: { label: "Pending", bg: "#fff7ed", color: "#b45309", bar: "#f59e0b" },
+  overdue: { label: "Overdue", bg: "#fef2f2", color: "#b91c1c", bar: "#ef4444" },
 };
 
-const AV_BG = { paid: "#eaf2fd", pending: "#fef3c7", overdue: "#fee2e2" };
-const AV_TC = { paid: "#1d4ed8", pending: "#92400e", overdue: "#b91c1c" };
+const AV_BG = { paid: "#ecfdf3", pending: "#fff7ed", overdue: "#fef2f2" };
+const AV_TC = { paid: "#15803d", pending: "#b45309", overdue: "#b91c1c" };
 const GM = {
   overdue: { label: "Overdue", rowBg: "#fef2f2", rowColor: "#b91c1c" },
-  pending: { label: "Pending", rowBg: "#fef3c7", rowColor: "#92400e" },
-  paid:    { label: "Paid",    rowBg: "#f0fdf4", rowColor: "#166534" },
+  pending: { label: "Pending", rowBg: "#fff7ed", rowColor: "#b45309" },
+  paid:    { label: "Paid",    rowBg: "#ecfdf3", rowColor: "#15803d" },
 };
 
-const DEPT_COLORS = ["#10b981","#3b82f6","#8b5cf6","#0ea5e9","#f59e0b","#ef4444","#06b6d4","#84cc16"];
+const DEPT_COLORS = ["#2848d8","#0ea5e9","#8b5cf6","#10b981","#f59e0b","#ef4444","#06b6d4","#84cc16"];
 
 const FEE_TYPES = ["Tuition", "Van fees", "Exam fees", "Lab fees", "Library", "Hostel"];
 const YEARS = [1, 2, 3, 4];
+
+// ================= SHARED MODAL STYLES =================
+const overlayStyle = {
+  position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 1100,
+  display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+};
+const modalStyle = { background: "#fff", borderRadius: 14, width: "100%", maxWidth: 480, overflow: "hidden", boxShadow: "0 20px 50px rgba(16,24,40,.18)" };
+const modalHeadStyle = {
+  padding: "18px 20px 14px", borderBottom: `1px solid ${HAIR}`,
+  display: "flex", justifyContent: "space-between", alignItems: "center",
+};
+const inputStyle = {
+  width: "100%", padding: "10px 12px", borderRadius: 9,
+  border: "1px solid #e2e8f0", fontSize: 14, color: INK, boxSizing: "border-box",
+};
+const labelStyle = { display: "block", fontSize: 12.5, fontWeight: 500, color: MUTED, marginBottom: 6 };
+const closeBtnStyle = {
+  width: 30, height: 30, borderRadius: "50%", border: "1px solid #e2e8f0",
+  background: "#f8fafc", cursor: "pointer", fontSize: 16, color: MUTED,
+  display: "flex", alignItems: "center", justifyContent: "center",
+};
+const primaryBtn = (enabled = true) => ({
+  padding: "10px 18px", borderRadius: 9, border: "none",
+  background: enabled ? BRAND : "#94a3b8", color: "#fff",
+  fontSize: 14, fontWeight: 500, cursor: enabled ? "pointer" : "not-allowed",
+});
+const cancelBtn = {
+  padding: "10px 18px", borderRadius: 9, border: "1px solid #e2e8f0",
+  background: "#fff", fontSize: 14, fontWeight: 500, cursor: "pointer", color: "#475569",
+};
 
 // ================= GROUPED LIST =================
 function GroupedList({ fees, onEdit, compact = false }) {
@@ -49,7 +87,7 @@ function GroupedList({ fees, onEdit, compact = false }) {
   sorted.forEach((f) => { const s = getStatus(f); if (groups[s]) groups[s].push(f); });
 
   if (!fees.length) return (
-    <div style={{ padding: 30, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>
+    <div style={{ padding: 30, textAlign: "center", color: "#94a3b8", fontSize: 14 }}>
       No students found
     </div>
   );
@@ -62,10 +100,10 @@ function GroupedList({ fees, onEdit, compact = false }) {
         return (
           <div key={g}>
             <div style={{
-              padding: "8px 18px", fontSize: 10, fontWeight: 700,
-              letterSpacing: ".07em", textTransform: "uppercase",
+              padding: "8px 18px", fontSize: 11, fontWeight: 600,
+              letterSpacing: 0, textTransform: "none",
               background: m.rowBg, color: m.rowColor,
-              borderBottom: "1px solid #f1f5f9",
+              borderBottom: `1px solid ${HAIR}`,
             }}>
               {m.label} — {groups[g].length} student{groups[g].length > 1 ? "s" : ""}
             </div>
@@ -96,36 +134,36 @@ function StuRow({ fee, onEdit, compact }) {
         width: 34, height: 34, borderRadius: "50%",
         background: AV_BG[status] || "#f1f5f9", color: AV_TC[status] || "#374151",
         display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 12, fontWeight: 700, flexShrink: 0, marginRight: 12,
+        fontSize: 12, fontWeight: 600, flexShrink: 0, marginRight: 12,
       }}>
         {ini(fee.student_name || "?")}
       </div>
       <div style={{ minWidth: 110 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>
+        <div style={{ fontSize: 13.5, fontWeight: 500, color: INK }}>
           {fee.student_name || "Student"}
         </div>
-        <div style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
+        <div style={{ fontSize: 12, color: MUTED, marginTop: 1 }}>
           {fee.department || "—"}
         </div>
       </div>
       <div style={{ flex: 1, margin: "0 16px" }}>
-        <div style={{ fontSize: 11, color: "#64748b" }}>{fee.term || "—"}</div>
+        <div style={{ fontSize: 12, color: MUTED }}>{fee.term || "—"}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-          <div style={{ flex: 1, height: 4, borderRadius: 4, background: "#e5e7eb" }}>
-            <div style={{ height: 4, borderRadius: 4, background: m.bar, width: `${pct}%` }} />
+          <div style={{ flex: 1, height: 5, borderRadius: 999, background: "#eef0f4" }}>
+            <div style={{ height: 5, borderRadius: 999, background: m.bar, width: `${pct}%` }} />
           </div>
-          <span style={{ fontSize: 10, fontWeight: 700, minWidth: 28, color: m.bar }}>{pct}%</span>
+          <span style={{ fontSize: 11, fontWeight: 600, minWidth: 28, color: m.bar }}>{pct}%</span>
         </div>
       </div>
       <div style={{ textAlign: "right", flexShrink: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{money(fee.amount)}</div>
-        <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>Due: {fee.due_date || "—"}</div>
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: INK }}>{money(fee.amount)}</div>
+        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Due: {fee.due_date || "—"}</div>
         {fee.extended_date && (
-          <div style={{ fontSize: 10, color: "#f59e0b", fontWeight: 600 }}>Ext: {fee.extended_date}</div>
+          <div style={{ fontSize: 11, color: "#b45309", fontWeight: 500 }}>Ext: {fee.extended_date}</div>
         )}
         <span style={{
-          display: "inline-block", padding: "3px 10px", borderRadius: 20,
-          fontSize: 10, fontWeight: 700, marginTop: 4,
+          display: "inline-block", padding: "3px 11px", borderRadius: 999,
+          fontSize: 11.5, fontWeight: 500, marginTop: 4,
           background: m.bg, color: m.color,
         }}>
           {m.label}
@@ -134,11 +172,12 @@ function StuRow({ fee, onEdit, compact }) {
       <button
         onClick={() => onEdit(fee)}
         style={{
-          padding: "4px 8px", borderRadius: 6, border: "1px solid #e2e8f0",
-          background: "#fff", fontSize: 11, cursor: "pointer", color: "#374151", marginLeft: 10,
+          padding: "7px 14px", borderRadius: 9, border: "none",
+          background: "#eef2ff", fontSize: 13, fontWeight: 500,
+          cursor: "pointer", color: BRAND, marginLeft: 12,
         }}
       >
-        ✏️
+        Edit
       </button>
     </div>
   );
@@ -176,10 +215,10 @@ function DeptModal({ dept, fees, onClose, onEdit }) {
     : filtered.filter((f) => getStatus(f) !== "paid");
 
   const pills = [
-    { key: "all",     bg: "#f1f5f9", color: "#0f172a", border: "#0f172a", label: `All (${dFees.length})` },
-    { key: "overdue", bg: "#fee2e2", color: "#b91c1c", border: "#dc2626", label: `Overdue (${counts.overdue})` },
-    { key: "pending", bg: "#fef3c7", color: "#92400e", border: "#f59e0b", label: `Pending (${counts.pending})` },
-    { key: "paid",    bg: "#dcfce7", color: "#166534", border: "#16a34a", label: `Paid (${counts.paid})` },
+    { key: "all",     bg: "#eef2ff", color: BRAND,     border: BRAND,     label: `All (${dFees.length})` },
+    { key: "overdue", bg: "#fef2f2", color: "#b91c1c", border: "#dc2626", label: `Overdue (${counts.overdue})` },
+    { key: "pending", bg: "#fff7ed", color: "#b45309", border: "#f59e0b", label: `Pending (${counts.pending})` },
+    { key: "paid",    bg: "#ecfdf3", color: "#15803d", border: "#16a34a", label: `Paid (${counts.paid})` },
   ];
 
   const dlLabel = mf === "paid" ? null
@@ -188,17 +227,15 @@ function DeptModal({ dept, fees, onClose, onEdit }) {
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 1000,
-        display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+      style={{ ...overlayStyle, zIndex: 1000 }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 620,
-        maxHeight: "80vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid #f1f5f9", flexShrink: 0 }}>
+      <div style={{ ...modalStyle, maxWidth: 620, maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "18px 20px 14px", borderBottom: `1px solid ${HAIR}`, flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>{dept.name}</div>
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+              <div style={{ fontSize: 17, fontWeight: 600, color: INK }}>{dept.name}</div>
+              <div style={{ fontSize: 12.5, color: MUTED, marginTop: 2 }}>
                 {dFees.length} students · filter by status below
               </div>
             </div>
@@ -206,26 +243,22 @@ function DeptModal({ dept, fees, onClose, onEdit }) {
               {dlLabel && (
                 <button
                   onClick={() => downloadCSV(dlFees, `${(dept.filter || "all").replace(/\s+/g, "-").toLowerCase()}-${mf}-fees.csv`)}
-                  style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #d5e8fe",
-                    background: "#eff6ff", fontSize: 11, fontWeight: 600, cursor: "pointer",
-                    color: "#1d4ed8", display: "flex", alignItems: "center", gap: 5 }}
+                  style={{ padding: "7px 14px", borderRadius: 9, border: "1px solid #dbe3ff",
+                    background: "#eef2ff", fontSize: 12, fontWeight: 500, cursor: "pointer",
+                    color: BRAND, display: "flex", alignItems: "center", gap: 5 }}
                 >
                   ⬇ {dlLabel}
                 </button>
               )}
-              <button onClick={onClose}
-                style={{ width: 30, height: 30, borderRadius: "50%", border: "1px solid #e2e8f0",
-                  background: "#f8fafc", cursor: "pointer", fontSize: 16, color: "#64748b",
-                  display: "flex", alignItems: "center", justifyContent: "center" }}
-              >✕</button>
+              <button onClick={onClose} style={closeBtnStyle}>✕</button>
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {pills.map((p) => (
               <button key={p.key} onClick={() => setMf(p.key)}
-                style={{ padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
+                style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 500,
                   cursor: "pointer", background: p.bg, color: p.color,
-                  border: `2px solid ${mf === p.key ? p.border : "transparent"}`, transition: ".15s" }}
+                  border: `1.5px solid ${mf === p.key ? p.border : "transparent"}`, transition: ".15s" }}
               >
                 {p.label}
               </button>
@@ -247,32 +280,19 @@ function GenerateFeeForm({ courses, onClose, onGenerate }) {
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  const inputStyle = { width: "100%", padding: "8px 12px", borderRadius: 8,
-    border: "1px solid #e2e8f0", fontSize: 13, color: "#0f172a", boxSizing: "border-box" };
-  const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 5 };
-
   const ready = form.course && form.year && form.fee_type && form.amount;
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 1100,
-        display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 480, overflow: "hidden" }}>
-        <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid #f1f5f9",
-          display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div style={overlayStyle} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={modalStyle}>
+        <div style={modalHeadStyle}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>Add Fees</div>
-            <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: INK }}>Add fees</div>
+            <div style={{ fontSize: 12.5, color: MUTED, marginTop: 2 }}>
               Applied to every student in the chosen course &amp; year
             </div>
           </div>
-          <button onClick={onClose}
-            style={{ width: 30, height: 30, borderRadius: "50%", border: "1px solid #e2e8f0",
-              background: "#f8fafc", cursor: "pointer", fontSize: 16, color: "#64748b",
-              display: "flex", alignItems: "center", justifyContent: "center" }}
-          >✕</button>
+          <button onClick={onClose} style={closeBtnStyle}>✕</button>
         </div>
 
         <div style={{ padding: 20 }}>
@@ -317,16 +337,11 @@ function GenerateFeeForm({ courses, onClose, onGenerate }) {
         </div>
 
         <div style={{ padding: "0 20px 20px", display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          <button onClick={onClose}
-            style={{ padding: "9px 18px", borderRadius: 10, border: "1px solid #e2e8f0",
-              background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#374151" }}
-          >Cancel</button>
+          <button onClick={onClose} style={cancelBtn}>Cancel</button>
           <button
             disabled={!ready}
             onClick={() => onGenerate(form)}
-            style={{ padding: "9px 18px", borderRadius: 10, border: "none",
-              background: ready ? "#0f172a" : "#94a3b8", color: "#fff",
-              fontSize: 13, fontWeight: 600, cursor: ready ? "pointer" : "not-allowed" }}
+            style={primaryBtn(ready)}
           >
             Generate fees
           </button>
@@ -348,25 +363,12 @@ function FeeForm({ fee, onClose, onSave }) {
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  const inputStyle = { width: "100%", padding: "8px 12px", borderRadius: 8,
-    border: "1px solid #e2e8f0", fontSize: 13, color: "#0f172a", boxSizing: "border-box" };
-  const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 5 };
-
   return (
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 1100,
-        display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 480, overflow: "hidden" }}>
-        <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid #f1f5f9",
-          display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>Edit Fee</div>
-          <button onClick={onClose}
-            style={{ width: 30, height: 30, borderRadius: "50%", border: "1px solid #e2e8f0",
-              background: "#f8fafc", cursor: "pointer", fontSize: 16, color: "#64748b",
-              display: "flex", alignItems: "center", justifyContent: "center" }}
-          >✕</button>
+    <div style={overlayStyle} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={modalStyle}>
+        <div style={modalHeadStyle}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: INK }}>Edit fee</div>
+          <button onClick={onClose} style={closeBtnStyle}>✕</button>
         </div>
 
         <div style={{ padding: 20 }}>
@@ -424,15 +426,9 @@ function FeeForm({ fee, onClose, onSave }) {
         </div>
 
         <div style={{ padding: "0 20px 20px", display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          <button onClick={onClose}
-            style={{ padding: "9px 18px", borderRadius: 10, border: "1px solid #e2e8f0",
-              background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#374151" }}
-          >Cancel</button>
-          <button onClick={() => onSave(form, fee.id)}
-            style={{ padding: "9px 18px", borderRadius: 10, border: "none",
-              background: "#0f172a", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-          >
-            Update Fee
+          <button onClick={onClose} style={cancelBtn}>Cancel</button>
+          <button onClick={() => onSave(form, fee.id)} style={primaryBtn(true)}>
+            Update fee
           </button>
         </div>
       </div>
@@ -585,138 +581,134 @@ export default function AdminFees() {
         <Sidebar open={open} setOpen={setOpen} />
         <div className="main">
           <div className="content">
-            <div style={{ background: "#f0f4ff", borderRadius: 16, padding: 5 }}>
 
-              {/* ── TITLE ROW ── */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-                <div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: "#0f172a" }}>Fee Management</div>
-                  <div style={{ fontSize: 13, color: "#64748b", marginTop: 3 }}>Track and manage all student payments</div>
-                </div>
-                <button
-                  onClick={() => setShowGenerate(true)}
-                  style={{ padding: "10px 20px", background: "#0f172a", color: "#fff", border: "none",
-                    borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer",
-                    display: "flex", alignItems: "center", gap: 6 }}
+            {/* ── HEADER ── */}
+            <div className="header-box" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+              <div>
+                <h2>Fee Management</h2>
+                <p>Track and manage all student payments</p>
+              </div>
+              <button className="btn-primary" onClick={() => setShowGenerate(true)}>
+                + Add fees
+              </button>
+            </div>
+
+            {/* ── SUMMARY CARDS ── */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14 }}>
+              {[
+                { key: "all",     label: "Total fees", val: money(stats.total),   sub: `${fees.length} fees`,          color: INK,       accent: BRAND },
+                { key: "paid",    label: "Collected",  val: money(stats.paid),    sub: `${stats.paidCnt} paid`,        color: "#15803d", accent: "#15803d" },
+                { key: "pending", label: "Pending",    val: money(stats.pending), sub: `${stats.pendingCnt} students`, color: "#b45309", accent: "#f59e0b" },
+                { key: "overdue", label: "Overdue",    val: money(stats.overdue), sub: `${stats.overdueCnt} students`, color: "#dc2626", accent: "#dc2626" },
+              ].map((c) => (
+                <div key={c.key}
+                  onClick={() => setStatusFilter(statusFilter === c.key ? "all" : c.key)}
+                  style={{ background: "#fff", borderRadius: 14, padding: "18px 18px 16px",
+                    border: `1px solid ${LINE}`, cursor: "pointer", transition: ".15s",
+                    boxShadow: "0 1px 3px rgba(16,24,40,.04)",
+                    borderBottom: `3px solid ${statusFilter === c.key ? c.accent : LINE}` }}
                 >
-                  + Add Fees
-                </button>
-              </div>
+                  <div style={{ fontSize: 12, fontWeight: 500, letterSpacing: 0, textTransform: "none", color: MUTED, marginBottom: 6 }}>{c.label}</div>
+                  <div style={{ fontSize: 26, fontWeight: 600, color: c.color, letterSpacing: "-0.01em" }}>{c.val}</div>
+                  <div style={{ fontSize: 12.5, marginTop: 6, fontWeight: 500, color: "#98a2b3" }}>{c.sub}</div>
+                </div>
+              ))}
+            </div>
 
-              {/* ── SUMMARY CARDS ── */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 28 }}>
-                {[
-                  { key: "all",     label: "Total Fees", val: money(stats.total),   sub: `${fees.length} fees`,          color: "#0f172a", accent: "#2563eb" },
-                  { key: "paid",    label: "Collected",  val: money(stats.paid),    sub: `${stats.paidCnt} paid`,        color: "#15803d", accent: "#15803d" },
-                  { key: "pending", label: "Pending",    val: money(stats.pending), sub: `${stats.pendingCnt} students`, color: "#ea580c", accent: "#ea580c" },
-                  { key: "overdue", label: "Overdue",    val: money(stats.overdue), sub: `${stats.overdueCnt} students`, color: "#dc2626", accent: "#dc2626" },
-                ].map((c) => (
-                  <div key={c.key}
-                    onClick={() => setStatusFilter(statusFilter === c.key ? "all" : c.key)}
-                    style={{ background: "#fff", borderRadius: 14, padding: "16px 18px",
-                      border: "1px solid #e8edf8", cursor: "pointer", transition: ".15s",
-                      borderBottom: `3px solid ${statusFilter === c.key ? c.accent : "transparent"}` }}
+            {/* ── DEPARTMENT CARDS ── */}
+            <div style={{ fontSize: 15, fontWeight: 600, color: INK, marginBottom: -4 }}>
+              Departments <span style={{ fontWeight: 400, color: MUTED, fontSize: 13 }}>— click a card to view students</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
+              {depts.map((d, i) => {
+                const dFees = d.filter ? enriched.filter((f) => f.department === d.filter) : enriched;
+                const total = dFees.reduce((s, f) => s + Number(f.amount || 0), 0);
+                const paid  = dFees.filter((f) => f.status === "paid").reduce((s, f) => s + Number(f.amount || 0), 0);
+                const pct   = total > 0 ? Math.round((paid / total) * 100) : 0;
+                const c = {
+                  overdue: dFees.filter((f) => getStatus(f) === "overdue").length,
+                  pending: dFees.filter((f) => getStatus(f) === "pending").length,
+                  paid:    dFees.filter((f) => f.status === "paid").length,
+                };
+                const accent = DEPT_COLORS[i % DEPT_COLORS.length];
+                return (
+                  <div key={d.name}
+                    onClick={() => setActiveDept(d)}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-3px)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}
+                    style={{ background: "#fff", borderRadius: 14, border: `1px solid ${LINE}`,
+                      borderTop: `3px solid ${accent}`, padding: 16, cursor: "pointer", transition: ".2s",
+                      boxShadow: "0 1px 3px rgba(16,24,40,.04)" }}
                   >
-                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", color: c.color, marginBottom: 6 }}>{c.label}</div>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: c.color }}>{c.val}</div>
-                    <div style={{ fontSize: 11, marginTop: 4, fontWeight: 500, color: c.color }}>{c.sub}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* ── DEPARTMENT CARDS ── */}
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginBottom: 12 }}>
-                Departments — click a card to view students
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 24 }}>
-                {depts.map((d, i) => {
-                  const dFees = d.filter ? enriched.filter((f) => f.department === d.filter) : enriched;
-                  const total = dFees.reduce((s, f) => s + Number(f.amount || 0), 0);
-                  const paid  = dFees.filter((f) => f.status === "paid").reduce((s, f) => s + Number(f.amount || 0), 0);
-                  const pct   = total > 0 ? Math.round((paid / total) * 100) : 0;
-                  const c = {
-                    overdue: dFees.filter((f) => getStatus(f) === "overdue").length,
-                    pending: dFees.filter((f) => getStatus(f) === "pending").length,
-                    paid:    dFees.filter((f) => f.status === "paid").length,
-                  };
-                  const accent = DEPT_COLORS[i % DEPT_COLORS.length];
-                  return (
-                    <div key={d.name}
-                      onClick={() => setActiveDept(d)}
-                      onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-3px)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}
-                      style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8edf8",
-                        borderTop: `3px solid ${accent}`, padding: 16, cursor: "pointer", transition: ".2s" }}
-                    >
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 10 }}>{d.name}</div>
-                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
-                        {c.overdue > 0 && <span style={{ display: "inline-block", padding: "3px 9px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: "#fee2e2", color: "#b91c1c" }}>{c.overdue} overdue</span>}
-                        {c.pending > 0 && <span style={{ display: "inline-block", padding: "3px 9px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: "#fef3c7", color: "#92400e" }}>{c.pending} pending</span>}
-                        {c.paid    > 0 && <span style={{ display: "inline-block", padding: "3px 9px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: "#dcfce7", color: "#166534" }}>{c.paid} paid</span>}
-                      </div>
-                      <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>
-                        Total: {money(total)} · {pct}% collected
-                      </div>
-                      <div style={{ height: 5, borderRadius: 4, background: "#e5e7eb" }}>
-                        <div style={{ height: 5, borderRadius: 4, background: accent, width: `${pct}%` }} />
-                      </div>
-                      <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 8 }}>↗ Click to view students</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: INK, marginBottom: 10 }}>{d.name}</div>
+                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
+                      {c.overdue > 0 && <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#fef2f2", color: "#b91c1c" }}>{c.overdue} overdue</span>}
+                      {c.pending > 0 && <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#fff7ed", color: "#b45309" }}>{c.pending} pending</span>}
+                      {c.paid    > 0 && <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#ecfdf3", color: "#15803d" }}>{c.paid} paid</span>}
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* ── STUDENT LIST ── */}
-              <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8edf8", overflow: "hidden" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-                  padding: "14px 18px", borderBottom: "1px solid #f1f5f9", flexWrap: "wrap", gap: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
-                    All students — fee status
-                    {loading && <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: 8 }}>Loading…</span>}
+                    <div style={{ fontSize: 12, color: MUTED, marginBottom: 6 }}>
+                      Total: {money(total)} · {pct}% collected
+                    </div>
+                    <div style={{ height: 5, borderRadius: 999, background: "#eef0f4" }}>
+                      <div style={{ height: 5, borderRadius: 999, background: accent, width: `${pct}%` }} />
+                    </div>
+                    <div style={{ fontSize: 11, color: "#98a2b3", marginTop: 8 }}>↗ Click to view students</div>
                   </div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <select value={termFilter} onChange={(e) => setTermFilter(e.target.value)}
-                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12, color: "#374151", background: "#f8fafc" }}
-                    >
-                      <option value="all">All fee types</option>
-                      {terms.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <input placeholder="Search student…" value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12, color: "#374151", background: "#f8fafc", width: 150 }}
-                    />
-                  </div>
+                );
+              })}
+            </div>
+
+            {/* ── STUDENT LIST ── */}
+            <div style={{ background: "#fff", borderRadius: 14, border: `1px solid ${LINE}`, overflow: "hidden", boxShadow: "0 1px 3px rgba(16,24,40,.04)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "14px 18px", borderBottom: `1px solid ${HAIR}`, flexWrap: "wrap", gap: 8 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>
+                  All students — fee status
+                  {loading && <span style={{ fontSize: 12, color: "#94a3b8", marginLeft: 8, fontWeight: 400 }}>Loading…</span>}
                 </div>
-                <GroupedList fees={filtered} onEdit={handleEdit} />
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <select value={termFilter} onChange={(e) => setTermFilter(e.target.value)}
+                    style={{ padding: "8px 12px", borderRadius: 9, border: "1px solid #e2e8f0", fontSize: 13, color: "#374151", background: "#fff" }}
+                  >
+                    <option value="all">All fee types</option>
+                    {terms.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <input placeholder="Search student…" value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={{ padding: "8px 12px", borderRadius: 9, border: "1px solid #e2e8f0", fontSize: 13, color: "#374151", background: "#fff", width: 160 }}
+                  />
+                </div>
               </div>
+              <GroupedList fees={filtered} onEdit={handleEdit} />
+            </div>
 
-              {/* ── DEPT MODAL ── */}
-              {activeDept && (
-                <DeptModal dept={activeDept} fees={enriched}
-                  onClose={() => setActiveDept(null)} onEdit={handleEdit} />
-              )}
+            {/* ── DEPT MODAL ── */}
+            {activeDept && (
+              <DeptModal dept={activeDept} fees={enriched}
+                onClose={() => setActiveDept(null)} onEdit={handleEdit} />
+            )}
 
-              {/* ── GENERATE FORM ── */}
-              {showGenerate && (
-                <GenerateFeeForm courses={courses}
-                  onClose={() => setShowGenerate(false)} onGenerate={handleGenerate} />
-              )}
+            {/* ── GENERATE FORM ── */}
+            {showGenerate && (
+              <GenerateFeeForm courses={courses}
+                onClose={() => setShowGenerate(false)} onGenerate={handleGenerate} />
+            )}
 
-              {/* ── EDIT FORM ── */}
-              {editingFee && (
-                <FeeForm fee={editingFee}
-                  onClose={() => setEditingFee(null)} onSave={handleSave} />
-              )}
+            {/* ── EDIT FORM ── */}
+            {editingFee && (
+              <FeeForm fee={editingFee}
+                onClose={() => setEditingFee(null)} onSave={handleSave} />
+            )}
 
-              {/* ── TOAST ── */}
-              {toast && (
-                <div style={{ position: "fixed", bottom: 24, right: 24, background: "#0f172a", color: "#fff",
-                  padding: "12px 20px", borderRadius: 12, fontSize: 13, zIndex: 9999, fontWeight: 500 }}>
-                  {toast}
-                </div>
-              )}
+            {/* ── TOAST ── */}
+            {toast && (
+              <div style={{ position: "fixed", bottom: 24, right: 24, background: INK, color: "#fff",
+                padding: "12px 20px", borderRadius: 12, fontSize: 13.5, zIndex: 9999, fontWeight: 500,
+                boxShadow: "0 8px 25px rgba(0,0,0,.2)" }}>
+                {toast}
+              </div>
+            )}
 
-            </div>{/* colored */}
           </div>{/* content */}
         </div>{/* main */}
       </div>{/* layout */}

@@ -1,10 +1,14 @@
 from pathlib import Path
 import os
+from dotenv import load_dotenv
 
 # ===================== BASE =====================
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-a-$wkrvrn4*)3=kw8z%nmch$y7+vtm5e-kp=dbno!fk9u-ci%g'
+# load backend/.env
+load_dotenv(BASE_DIR / ".env")
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
 
 DEBUG = True
 
@@ -37,7 +41,7 @@ INSTALLED_APPS = [
 
 # ===================== MIDDLEWARE =====================
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',   # ✅ MUST BE FIRST
+    'corsheaders.middleware.CorsMiddleware',   # MUST BE FIRST
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -61,7 +65,7 @@ TEMPLATES = [
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.debug',
-                'django.template.context_processors.request',  # ✅ important for auth
+                'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
@@ -78,11 +82,11 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'lms_db',
-        'USER': 'postgres',
-        'PASSWORD': 'Postgres',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': os.environ.get("DB_NAME", "lms_db"),
+        'USER': os.environ.get("DB_USER", "postgres"),
+        'PASSWORD': os.environ.get("DB_PASSWORD", ""),
+        'HOST': os.environ.get("DB_HOST", "localhost"),
+        'PORT': os.environ.get("DB_PORT", "5432"),
     }
 }
 
@@ -121,16 +125,17 @@ AUTH_USER_MODEL = 'users.User'
 
 
 # ===================== DRF =====================
-# ===================== DRF =====================
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',   # 🔥 FIX
+        'rest_framework.permissions.IsAuthenticated',
     ),
 }
 
+
+# ===================== JWT =====================
 from datetime import timedelta
 
 SIMPLE_JWT = {
@@ -138,22 +143,16 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-from datetime import timedelta
 
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=24),
-    'AUTH_HEADER_TYPES': ('Bearer',),   # 🔥 THIS IS THE FIX
-    
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.AllowAny',
-    ),
-    
-}
+# ===================== EXTERNAL API KEYS =====================
+GOOGLE_CALENDAR_API_KEY = os.environ.get("GOOGLE_CALENDAR_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-# ===================== CORS + CSRF (IMPORTANT) =====================
-CORS_ALLOW_ALL_ORIGINS = True
+
+# ===================== CORS + CSRF =====================
+CORS_ALLOW_ALL_ORIGINS = True   # dev only — lock this down before deployment
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
+    "http://localhost:5173",   # Vite dev server
 ]
