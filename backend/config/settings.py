@@ -32,6 +32,8 @@ INSTALLED_APPS = [
     'exams',
     'events',
     'teachingplan',
+    'mentoring',
+    'classgroups',
 
     # Third-party
     'rest_framework',

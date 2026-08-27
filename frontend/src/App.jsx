@@ -61,6 +61,15 @@ import ParentMessage from "./pages/Parent/ParentMessage";
 
 import HODDepartment from "./features/hod/HODDepartment";
 import HodAllocation from "./features/hod/HodAllocation";
+import HodMentorAllocation from "./features/mentoring/HodMentorAllocation";
+import HodMentorDashboard from "./features/mentoring/HodMentorDashboard";
+import HodMentorDetail from "./features/mentoring/HodMentorDetail";
+import HodAllocationHistory from "./features/mentoring/HodAllocationHistory";
+import HodChangeRequests from "./features/mentoring/HodChangeRequests";
+import HodMentoringSettings from "./features/mentoring/HodMentoringSettings";
+import StaffMyMentees from "./features/mentoring/StaffMyMentees";
+import StudentMyMentor from "./features/mentoring/StudentMyMentor";
+import ClassGroups from "./features/classgroups/ClassGroups";
 import MyClass from "./features/tutor/MyClass";
 import TeacherTeachingPlan from "./features/teachingplan/TeacherTeachingPlan";
 import HODTeachingPlan from "./features/teachingplan/HODTeachingPlan";
@@ -326,13 +335,46 @@ function App() {
   }
 />
         <Route
-              path="/hod/allocation"
-              element={
-                <ProtectedRoute role="teacher">
-                  <HodAllocation />
-                </ProtectedRoute>
-              }
-            />
+          path="/hod/allocation"
+          element={
+            <ProtectedRoute role="teacher">
+              <HodAllocation />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ================= MENTOR ALLOCATION ================= */}
+        <Route
+          path="/hod/mentor-allocation"
+          element={
+            <ProtectedRoute role="teacher">
+              <HodMentorAllocation />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route path="/hod/mentor-dashboard" element={
+          <ProtectedRoute role="teacher"><HodMentorDashboard /></ProtectedRoute>} />
+                <Route path="/hod/mentor-change-requests" element={
+          <ProtectedRoute role="teacher"><HodChangeRequests /></ProtectedRoute>} />
+        <Route path="/hod/mentor-history" element={
+          <ProtectedRoute role="teacher"><HodAllocationHistory /></ProtectedRoute>} />
+        <Route path="/hod/mentor-settings" element={
+          <ProtectedRoute role="teacher"><HodMentoringSettings /></ProtectedRoute>} />
+        <Route path="/hod/mentors/:mentorId" element={
+          <ProtectedRoute role="teacher"><HodMentorDetail /></ProtectedRoute>} />
+
+        {/* ================= MY MENTEES (STAFF) ================= */}
+        <Route path="/my-mentees" element={
+          <ProtectedRoute role="teacher"><StaffMyMentees /></ProtectedRoute>} />
+
+        {/* ================= MY MENTOR (STUDENT) ================= */}
+        <Route path="/my-mentor" element={
+          <ProtectedRoute role="student"><StudentMyMentor /></ProtectedRoute>} />
+
+        {/* ================= CLASS GROUPS ================= */}
+        <Route path="/my-groups" element={
+          <ProtectedRoute roles={["teacher", "student"]}><ClassGroups /></ProtectedRoute>} />
 
         {/* ================= IQAC DASHBOARD ================= */}
         <Route path="/iqac" element={<ProtectedRoute role="iqac_admin"> <IqacDashboard /> </ProtectedRoute>} />
