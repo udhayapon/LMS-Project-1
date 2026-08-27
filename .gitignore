@@ -21,3 +21,10 @@ frontend/build/
 
 # VS Code
 .vscode/
+
+
+# Local database
+backend/db.sqlite3
+
+# Uploaded media
+backend/media/
