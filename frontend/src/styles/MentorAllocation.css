@@ -256,7 +256,9 @@
   background: #fff;
   overflow: hidden;
   margin-bottom: 14px;
+  flex-shrink: 0;
 }
+
 .ma-batch.pending { border-left: 3px solid #f59e0b; }
 .ma-batch.pool { border-left: 3px solid #ef4444; }
 .ma-batch-head {
