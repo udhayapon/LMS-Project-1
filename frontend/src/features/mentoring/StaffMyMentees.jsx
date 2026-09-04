@@ -3,8 +3,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
+import API from "../../api";
 
 import StaffChangeRequests from "./StaffChangeRequests";
+import AdvisorTeamsTab from "./AdvisorTeamsTab";
+import AdvisorMentorsTab from "./AdvisorMentorsTab";
+import "../../styles/TeamAllocation.css";
 
 import {
   attClass,
@@ -19,6 +23,7 @@ import {
   sendMessage,
   when,
   yearLabel,
+  fileSize,
 } from "./staffApi";
 
 import "../../App.css";
@@ -27,6 +32,8 @@ import "../../styles/MentorAllocation.css";
 const TABS = [
   { key: "dash", label: "Dashboard" },
   { key: "list", label: "All Mentees" },
+  { key: "teams", label: "Team Allocation", tutorOnly: true },
+  { key: "mentors", label: "Assign Mentors", tutorOnly: true },
   { key: "requests", label: "Change Requests" },
   { key: "profile", label: "Student Profile" },
   { key: "messages", label: "Messages" },
@@ -36,6 +43,14 @@ const TABS = [
 export default function StaffMyMentees() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("dash");
+
+  // only a class advisor gets the team tabs — same check the sidebar uses
+  const [isTutor, setIsTutor] = useState(false);
+  useEffect(() => {
+    API.get("users/my-class/")
+      .then((r) => setIsTutor(r.data?.is_tutor || false))
+      .catch(() => setIsTutor(false));
+  }, []);
 
   // ================= DATA =================
   const [data, setData] = useState(null);
@@ -63,6 +78,10 @@ export default function StaffMyMentees() {
   const [draft, setDraft] = useState("");
   const [convQ, setConvQ] = useState("");
   const bottomRef = useRef(null);
+
+  // ---- attachment on the private thread ----
+  const [file, setFile] = useState(null);
+  const fileRef = useRef(null);
 
   // ================= GROUPS =================
   const [groups, setGroups] = useState([]);
@@ -126,6 +145,9 @@ export default function StaffMyMentees() {
     setOpenId(id);
     setTab("messages");
     setThread(null);
+    // a file picked for one mentee must not follow you to the next
+    setFile(null);
+    if (fileRef.current) fileRef.current.value = "";
     try {
       setThread(await getThread(id));
       loadConvos();
@@ -135,14 +157,20 @@ export default function StaffMyMentees() {
     }
   };
 
+  const clearFile = () => {
+    setFile(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
   const doSend = async () => {
     const text = draft.trim();
-    if (!text) { flash("Nothing to send."); return; }
+    if (!text && !file) { flash("Write something or attach a file."); return; }
     setBusy(true);
     try {
-      const m = await sendMessage(openId, text);
+      const m = await sendMessage(openId, text, file);
       setThread((t) => ({ ...t, messages: [...t.messages, m] }));
       setDraft("");
+      clearFile();
       loadConvos();
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
     } catch (err) {
@@ -219,7 +247,7 @@ export default function StaffMyMentees() {
 
             {/* ================= TABS ================= */}
             <div className="ma-toggle" style={{ marginBottom: 16 }}>
-              {TABS.map((t) => (
+                {TABS.filter((t) => !t.tutorOnly || isTutor).map((t) => (
                 <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
                   {t.label}
                   {t.key === "messages" && unread > 0 ? ` (${unread})` : ""}
@@ -235,7 +263,7 @@ export default function StaffMyMentees() {
 
             {loading && <div className="ma-panel"><div className="ma-empty">Loading…</div></div>}
 
-              {!loading && data && tab !== "requests" && rows.length === 0 && !q && fYear === "all" && fGrade === "all" && (
+              {!loading && data && !["requests", "teams", "mentors"].includes(tab) && rows.length === 0 && !q && fYear === "all" && fGrade === "all" && (
               <div className="ma-panel">
                 <div className="ma-empty">
                   <b style={{ display: "block", marginBottom: 6 }}>You have no mentees yet</b>
@@ -459,6 +487,10 @@ export default function StaffMyMentees() {
                 </div>
               </>
             )}
+
+            {/* ================= TEAM ALLOCATION (CLASS ADVISOR) ================= */}
+            {tab === "teams" && <AdvisorTeamsTab />}
+            {tab === "mentors" && <AdvisorMentorsTab />}
 
             {/* ================= CHANGE REQUESTS ================= */}
             {tab === "requests" && <StaffChangeRequests />}
@@ -722,6 +754,13 @@ export default function StaffMyMentees() {
                             <div key={m.id} className={`msg ${m.from_me ? "me" : "them"}`}>
                               <div className="bub">
                                 {m.text}
+                                {m.attachment_url && (
+                                  <a className="msg-att" href={m.attachment_url}
+                                     target="_blank" rel="noreferrer">
+                                    📎 {m.attachment_name}
+                                    <span className="sz">{fileSize(m.attachment_size)}</span>
+                                  </a>
+                                )}
                                 <span className="tm">{when(m.created_at)}</span>
                               </div>
                             </div>
@@ -729,7 +768,21 @@ export default function StaffMyMentees() {
                           <div ref={bottomRef} />
                         </div>
 
+                        {file && (
+                          <div className="msg-bar">
+                            <span className="ma-pill ma-purple">📎 {file.name}</span>
+                            <div style={{ flex: 1 }} />
+                            <button className="ma-btn small" onClick={clearFile}>Remove</button>
+                          </div>
+                        )}
+
                         <div className="composer">
+                          <input
+                            type="file" ref={fileRef} style={{ display: "none" }}
+                            onChange={(e) => setFile(e.target.files[0] || null)}
+                          />
+                          <button className="ma-btn" title="Attach a file"
+                                  onClick={() => fileRef.current?.click()}>📎</button>
                           <textarea
                             value={draft}
                             placeholder="Write a reply…"

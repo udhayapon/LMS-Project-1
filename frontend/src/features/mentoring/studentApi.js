@@ -9,8 +9,12 @@ export const getThread = () => API.get(`${B}messages/`).then((r) => r.data);
 export const getAnnouncements = () => API.get(`${B}announcements/`).then((r) => r.data);
 
 // ================= WRITE =================
-export const sendMessage = (text) =>
-  API.post(`${B}messages/`, { text }).then((r) => r.data);
+export const sendMessage = (text, file) => {
+  const fd = new FormData();
+  fd.append("text", text || "");
+  if (file) fd.append("attachment", file);
+  return API.post(`${B}messages/`, fd).then((r) => r.data);
+};
 
 // ================= CHANGE REQUEST =================
 export const getChangeRequest = () =>
@@ -34,6 +38,13 @@ export const when = (iso) => {
   if (d.toDateString() === new Date().toDateString())
     return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+export const fileSize = (n) => {
+  if (!n) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 };
 
 export const errorText = (err, fallback = "Something went wrong.") => {

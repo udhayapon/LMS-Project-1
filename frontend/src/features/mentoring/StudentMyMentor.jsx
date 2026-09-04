@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
 import StudentChangeRequest from "./StudentChangeRequest";
+import StudentMyTeamTab from "./StudentMyTeamTab";
 
 import {
   errorText,
@@ -14,12 +15,14 @@ import {
   sendMessage,
   when,
   yearLabel,
+  fileSize,
 } from "./studentApi";
 
 import "../../App.css";
 import "../../styles/MentorAllocation.css";
 
 const TABS = [
+  { key: "team", label: "My Team" },
   { key: "mentor", label: "My Mentor" },
   { key: "change", label: "Request a Change" },
   { key: "messages", label: "Messages" },
@@ -29,7 +32,7 @@ const TABS = [
 
 export default function StudentMyMentor() {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState("mentor");
+  const [tab, setTab] = useState("team");
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -41,6 +44,10 @@ export default function StudentMyMentor() {
   const [draft, setDraft] = useState("");
   const [anns, setAnns] = useState(null);
   const bottomRef = useRef(null);
+
+  // ---- attachment ----
+  const [file, setFile] = useState(null);
+  const fileRef = useRef(null);
 
   const flash = (m) => {
     setToast(m);
@@ -78,14 +85,20 @@ export default function StudentMyMentor() {
     getAnnouncements().then(setAnns).catch(() => setAnns({ count: 0, results: [] }));
   }, [tab, data]);
 
+  const clearFile = () => {
+    setFile(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
   const doSend = async () => {
     const text = draft.trim();
-    if (!text) { flash("Nothing to send."); return; }
+    if (!text && !file) { flash("Write something or attach a file."); return; }
     setBusy(true);
     try {
-      const m = await sendMessage(text);
+      const m = await sendMessage(text, file);
       setThread((t) => ({ ...t, messages: [...t.messages, m] }));
       setDraft("");
+      clearFile();
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
     } catch (err) {
       flash(errorText(err, "Could not send."));
@@ -114,9 +127,9 @@ export default function StudentMyMentor() {
               </p>
             </div>
 
-            {data?.has_mentor && (
+            {data && (
               <div className="ma-toggle" style={{ marginBottom: 16 }}>
-                {TABS.map((t) => (
+                {TABS.filter((t) => t.key === "team" || data.has_mentor).map((t) => (
                   <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
                     {t.label}
                     {t.key === "announcements" && anns?.unread ? ` (${anns.unread})` : ""}
@@ -133,8 +146,11 @@ export default function StudentMyMentor() {
 
             {loading && <div className="ma-panel"><div className="ma-empty">Loading…</div></div>}
 
+            {/* ================= MY TEAM ================= */}
+            {!loading && data && tab === "team" && <StudentMyTeamTab />}
+
             {/* ================= NO MENTOR ================= */}
-            {!loading && data && !data.has_mentor && (
+            {!loading && data && !data.has_mentor && tab !== "team" && (
               <>
                 <div className="ma-panel" style={{ maxWidth: 620 }}>
                   <div className="ma-panel-body" style={{ textAlign: "center", padding: "44px 28px" }}>
@@ -146,12 +162,20 @@ export default function StudentMyMentor() {
                       {data.message}
                     </p>
                     {advisor?.email && (
-                      <button
-                        className="ma-btn primary"
-                        onClick={() => { window.location.href = `mailto:${advisor.email}`; }}
-                      >
-                        Email {advisor.name}
-                      </button>
+                      <>
+                        <button
+                          className="ma-btn primary"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(advisor.email);
+                            flash(`Copied ${advisor.email}`);
+                          }}
+                        >
+                          Copy {advisor.name}'s email
+                        </button>
+                        <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 8 }}>
+                          {advisor.email}
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
@@ -219,11 +243,11 @@ export default function StudentMyMentor() {
                             className="ma-cap" style={{ textAlign: "left" }}
                             onClick={() => {
                               if (!mentor.email) { flash("No email on record."); return; }
-                              // mailto: only works when the OS has a default mail app.
-                              // Copy the address too, so the button always does something.
+                              // Copy only. A mailto: here opened the OS app-chooser on
+                              // machines with no default mail app — three dialogs and a
+                              // Gmail signup page, which is worse than doing nothing.
                               navigator.clipboard?.writeText(mentor.email);
                               flash(`Copied ${mentor.email}`);
-                              window.location.href = `mailto:${mentor.email}`;
                             }}
                           >
                             <div style={{ fontSize: 17, marginBottom: 6 }}>✉</div>
@@ -311,6 +335,13 @@ export default function StudentMyMentor() {
                           <div key={m.id} className={`msg ${m.from_me ? "me" : "them"}`}>
                             <div className="bub">
                               {m.text}
+                              {m.attachment_url && (
+                                <a className="msg-att" href={m.attachment_url}
+                                   target="_blank" rel="noreferrer">
+                                  📎 {m.attachment_name}
+                                  <span className="sz">{fileSize(m.attachment_size)}</span>
+                                </a>
+                              )}
                               <span className="tm">{when(m.created_at)}</span>
                             </div>
                           </div>
@@ -318,7 +349,21 @@ export default function StudentMyMentor() {
                         <div ref={bottomRef} />
                       </div>
 
+                      {file && (
+                        <div className="msg-bar">
+                          <span className="ma-pill ma-purple">📎 {file.name}</span>
+                          <div style={{ flex: 1 }} />
+                          <button className="ma-btn small" onClick={clearFile}>Remove</button>
+                        </div>
+                      )}
+
                       <div className="composer">
+                        <input
+                          type="file" ref={fileRef} style={{ display: "none" }}
+                          onChange={(e) => setFile(e.target.files[0] || null)}
+                        />
+                        <button className="ma-btn" title="Attach a file"
+                                onClick={() => fileRef.current?.click()}>📎</button>
                         <textarea
                           value={draft}
                           placeholder="Write a message…"

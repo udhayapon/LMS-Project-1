@@ -327,3 +327,90 @@ def group_balance(load, setting):
     if load["A"] / load["total"] < 0.15:
         return "warn", "Low on grade A"
     return "ok", "Balanced"
+
+
+# ================= TEAM-BASED ALLOCATION =================
+def resolve_advisor_class(teacher):
+    """
+    The class this teacher is the advisor (YearTutor) for, or None.
+
+    Returns (course, year_number). Every advisor endpoint calls this and
+    refuses when it is None, so a teacher can only ever act on their own
+    class. YearTutor has a unique constraint on year, so at most one link
+    matters; if a teacher somehow tutors several, the first is used and the
+    caller can pass ?course= &year= to pick another.
+    """
+    from courses.models import YearTutor
+
+    link = (
+        YearTutor.objects
+        .filter(teacher=teacher)
+        .select_related("course", "year")
+        .first()
+    )
+    if not link:
+        return None
+    return link.course, link.year.year_number
+
+
+def advisor_classes(teacher):
+    """Every class this teacher advises, for the rare multi-class case."""
+    from courses.models import YearTutor
+
+    return [
+        {
+            "course_id": l.course_id,
+            "course_name": l.course.name,
+            "year": l.year.year_number,
+        }
+        for l in YearTutor.objects.filter(teacher=teacher)
+        .select_related("course", "year")
+    ]
+
+
+def class_students(course, year):
+    """Students in one class, in name order."""
+    return (
+        User.objects
+        .filter(role="student", course=course, year=year, is_active=True)
+        .select_related("course")
+        .order_by("first_name", "last_name")
+    )
+
+
+def student_in_team(student, academic_year):
+    """The student's team membership for a year, or None."""
+    from .models import MentorTeamMember
+
+    return (
+        MentorTeamMember.objects
+        .filter(student=student, team__academic_year=academic_year)
+        .select_related("team", "team__course")
+        .first()
+    )
+
+
+def mentor_rule_for(department, academic_year):
+    """The department's team rules for a year. Creates defaults on first read."""
+    from .models import MentorRule
+
+    rule, _ = MentorRule.objects.get_or_create(
+        department=department, academic_year=academic_year
+    )
+    return rule
+
+
+def teams_needed(student_count, rule):
+    """
+    How many teams a class produces. Never hard-coded — 69 students at 3 per
+    team is 23, but 74 at 3 is 25 with two teams carrying a fourth.
+    """
+    if student_count <= 0 or rule.team_size <= 0:
+        return 0
+    whole, left = divmod(student_count, rule.team_size)
+    if left == 0:
+        return whole
+    if rule.fallback == "extra_member" and whole > 0:
+        # the spare students join existing teams as extra members
+        return whole
+    return whole + 1

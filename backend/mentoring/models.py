@@ -431,3 +431,133 @@ class MentorChangeRequest(models.Model):
         # the reason decides confidentiality, always — not the caller
         self.is_confidential = self.reason in self.CONFIDENTIAL_REASONS
         super().save(*args, **kwargs)
+
+
+    # ================= TEAM-BASED ALLOCATION =================
+
+class MentorRule(models.Model):
+    """One row per department + academic year. Read by student, advisor and HOD."""
+
+    GRADE_MIX = (("abc", "One A, one B, one C"), ("none", "No grade rule"))
+    FALLBACK = (
+        ("extra_member", "Allow an extra student from another band"),
+        ("leave_short", "Leave those teams one short"),
+    )
+
+    department = models.ForeignKey(
+        "users.Department", on_delete=models.CASCADE, related_name="mentor_rules"
+    )
+    academic_year = models.CharField(max_length=9)
+
+    team_size = models.PositiveSmallIntegerField(default=3)
+    grade_mix = models.CharField(max_length=5, choices=GRADE_MIX, default="abc")
+    fallback = models.CharField(max_length=14, choices=FALLBACK, default="extra_member")
+
+    skip_last_year_mentors = models.BooleanField(default=True)
+    skip_class_advisors = models.BooleanField(default=False)
+    tiebreak_fewest_mentees = models.BooleanField(default=True)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [("department", "academic_year")]
+
+    def __str__(self):
+        return f"{self.department} · {self.academic_year}"
+
+
+class MentorTeam(models.Model):
+    """A team of students in one class that shares a mentor."""
+
+    course = models.ForeignKey(
+        "courses.Course", on_delete=models.CASCADE, related_name="mentor_teams"
+    )
+    year = models.PositiveSmallIntegerField()
+    academic_year = models.CharField(max_length=9)
+    number = models.PositiveSmallIntegerField()
+
+    mentor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        limit_choices_to={"role": "teacher"},
+        related_name="mentor_teams",
+    )
+    mentor_was_suggested = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+",
+    )
+
+    is_closed = models.BooleanField(default=False)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    proposed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="proposed_teams",
+    )
+
+    class Meta:
+        unique_together = [("course", "year", "academic_year", "number")]
+        ordering = ["number"]
+
+    def __str__(self):
+        return f"Team {self.number} · {self.course} Y{self.year}"
+
+
+class MentorTeamMember(models.Model):
+    """A student in a team. Join table so the fallback can add a fourth."""
+
+    team = models.ForeignKey(
+        MentorTeam, on_delete=models.CASCADE, related_name="members"
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        limit_choices_to={"role": "student"},
+        related_name="team_memberships",
+    )
+    band = models.CharField(max_length=1, blank=True)
+    is_extra = models.BooleanField(default=False)
+    joined_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        unique_together = [("team", "student")]
+
+
+class UnplacedStudent(models.Model):
+    """
+    A student the class advisor has deliberately left out of a team.
+
+    Only needed when the department rule is 'leave_short': the fallback is off,
+    nobody can take the student, and formation still has to close. Marking is
+    explicit so nothing is silently dropped — the row records who decided and
+    why, and disappears the moment the student is placed.
+    """
+
+    course = models.ForeignKey(
+        "courses.Course", on_delete=models.CASCADE, related_name="unplaced_students"
+    )
+    year = models.PositiveSmallIntegerField()
+    academic_year = models.CharField(max_length=9)
+
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        limit_choices_to={"role": "student"},
+        related_name="unplaced_marks",
+    )
+    band = models.CharField(max_length=1, blank=True)
+    reason = models.CharField(max_length=255, blank=True)
+
+    marked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+",
+    )
+    marked_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        unique_together = [("student", "academic_year")]
+
+    def __str__(self):
+        return f"{self.student} left unplaced ({self.academic_year})"
