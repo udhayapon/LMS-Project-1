@@ -3,6 +3,7 @@ from datetime import date
 
 from django.db.models import Max, Q
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes, permission_classes
@@ -13,7 +14,12 @@ from rest_framework.response import Response
 from courses.models import Notification, TeachingAssignment, Year, YearTutor
 from users.models import User
 
-from .models import ROMAN, ClassGroup, ClassMessage, ClassMessageRead
+from django.db import IntegrityError
+
+from .models import (
+    ROMAN, ClassEvent, ClassGroup, ClassMessage, ClassMessageRead,
+    ClassPoll, ClassPollOption, ClassPollVote,
+)
 from .serializers import ClassMessageSerializer, GroupSettingsSerializer, person_name
 
 MAX_UPLOAD = 10 * 1024 * 1024   # 10 MB
@@ -106,6 +112,17 @@ def group_card(group, user, role):
             "students_can_upload": group.students_can_upload,
         },
         "can_attach": (role == "owner") or group.students_can_upload,
+        # only what is live: a closed poll and a past event are not news
+        "open_polls": ClassPoll.objects.filter(
+            message__group=group, message__is_deleted=False, closed_early=False,
+            closes_at__gt=timezone.now(),
+        ).count(),
+        "next_event_at": (
+            ClassEvent.objects
+            .filter(message__group=group, message__is_deleted=False,
+                    starts_at__gte=timezone.now())
+            .values_list("starts_at", flat=True).first()
+        ),
     }
 
 
@@ -314,8 +331,10 @@ def group_messages(request, group_id):
 
     # ---------- GET ----------
     qs = group.messages.filter(is_deleted=False).select_related("sender")
-    if request.query_params.get("type") == "announcement":
-        qs = qs.filter(message_type=ClassMessage.ANNOUNCEMENT)
+    wanted = request.query_params.get("type")
+    if wanted in (ClassMessage.ANNOUNCEMENT, ClassMessage.POLL, ClassMessage.EVENT):
+        qs = qs.filter(message_type=wanted)
+    qs = qs.prefetch_related("poll__options", "poll__votes", "event")
 
     unread = unread_count(group, request.user)
 
@@ -480,3 +499,225 @@ def group_settings(request, group_id):
         return Response(ser.data)
 
     return Response(GroupSettingsSerializer(group).data)
+
+# ==================================================================
+# ================= POLLS AND EVENTS ===============================
+# ==================================================================
+# Both are ClassMessage rows with a type, so they arrive in the conversation
+# with everything else. Only the group owner creates them, and only the owner
+# can read who voted.
+
+
+def _owner_only(request, group_id):
+    """Returns (group, error). Creating a poll or an event is the teacher's."""
+    group, role, err = resolve(request.user, group_id)
+    if err:
+        return None, err
+    if role != "owner":
+        return None, Response(
+            {"detail": "Only the teacher of this group can do that."},
+            status=status.HTTP_403_FORBIDDEN)
+    if not group.has_audience():
+        return None, Response({
+            "detail": ("This group has no enrolled students, so nothing can be "
+                       "sent. Ask the office to enrol students in this subject."),
+            "reason": "no_audience",
+        }, status=status.HTTP_409_CONFLICT)
+    return group, None
+
+
+def _one(message, request):
+    return ClassMessageSerializer(message, context={"request": request}).data
+
+
+# ================= CREATE A POLL =================
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_poll(request, group_id):
+    """
+    {"question": "...", "options": ["a", "b"], "closes_at": "2026-09-08T17:00"}
+    """
+    group, err = _owner_only(request, group_id)
+    if err:
+        return err
+
+    question = (request.data.get("question") or "").strip()
+    if not question:
+        return Response({"detail": "A poll needs a question."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    options = [str(o).strip() for o in (request.data.get("options") or [])]
+    options = [o for o in options if o]
+    if len(options) < 2:
+        return Response({"detail": "A poll needs at least two options."},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if len(options) > 10:
+        return Response({"detail": "A poll can have at most ten options."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    closes_at = parse_datetime(str(request.data.get("closes_at") or ""))
+    if not closes_at:
+        return Response({"detail": "A poll needs a closing date and time."},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if timezone.is_naive(closes_at):
+        closes_at = timezone.make_aware(closes_at)
+    if closes_at <= timezone.now():
+        return Response({"detail": "The closing time has already passed."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    m = ClassMessage.objects.create(
+        group=group, sender=request.user,
+        message_type=ClassMessage.POLL, text=question,
+    )
+    poll = ClassPoll.objects.create(message=m, closes_at=closes_at)
+    ClassPollOption.objects.bulk_create([
+        ClassPollOption(poll=poll, text=t, order=i) for i, t in enumerate(options)
+    ])
+
+    notify(list(group.students()), f"📊 Poll — {group.display_name}", question)
+    return Response(_one(m, request), status=status.HTTP_201_CREATED)
+
+
+# ================= VOTE =================
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def vote_poll(request, group_id, poll_id):
+    """{"option_id": 4}. One vote, and it cannot be changed."""
+    group, role, err = resolve(request.user, group_id)
+    if err:
+        return err
+
+    poll = ClassPoll.objects.filter(id=poll_id, message__group=group,
+                                    message__is_deleted=False).first()
+    if not poll:
+        return Response({"detail": "That poll is not in this group."},
+                        status=status.HTTP_404_NOT_FOUND)
+    if not poll.is_open:
+        return Response({"detail": "This poll has closed."},
+                        status=status.HTTP_409_CONFLICT)
+    if role == "owner":
+        return Response({"detail": "You created this poll, so you do not vote in it."},
+                        status=status.HTTP_403_FORBIDDEN)
+
+    option = ClassPollOption.objects.filter(id=request.data.get("option_id"),
+                                            poll=poll).first()
+    if not option:
+        return Response({"detail": "Pick one of the options."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        ClassPollVote.objects.create(poll=poll, option=option, student=request.user)
+    except IntegrityError:
+        # the constraint, not a check — this also catches a double-click
+        return Response({"detail": "You have already voted in this poll."},
+                        status=status.HTTP_409_CONFLICT)
+
+    return Response(_one(poll.message, request))
+
+
+# ================= CLOSE EARLY =================
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def close_poll(request, group_id, poll_id):
+    group, err = _owner_only(request, group_id)
+    if err:
+        return err
+    poll = ClassPoll.objects.filter(id=poll_id, message__group=group).first()
+    if not poll:
+        return Response({"detail": "That poll is not in this group."},
+                        status=status.HTTP_404_NOT_FOUND)
+    poll.closed_early = True
+    poll.save(update_fields=["closed_early"])
+    return Response(_one(poll.message, request))
+
+
+# ================= WHO RESPONDED =================
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def poll_responses(request, group_id, poll_id):
+    """
+    Two states only: voted with their choice, and not voted.
+
+    There is deliberately no "viewed but did not vote" — ClassMessageRead
+    stores one read time per person per GROUP, not per message, so a view of
+    this particular poll cannot be reported accurately.
+
+    Owner only. A student never receives this, which is why the names are here
+    and not on the message.
+    """
+    group, err = _owner_only(request, group_id)
+    if err:
+        return err
+
+    poll = ClassPoll.objects.filter(id=poll_id, message__group=group).first()
+    if not poll:
+        return Response({"detail": "That poll is not in this group."},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    votes = {v.student_id: v for v in poll.votes.select_related("option", "student")}
+    voted, not_voted = [], []
+    for s in group.students().order_by("roll_number"):
+        v = votes.get(s.id)
+        row = {"id": s.id, "name": person_name(s), "roll_number": s.roll_number}
+        if v:
+            voted.append({**row, "option": v.option.text, "at": v.created_at})
+        else:
+            not_voted.append(row)
+
+    return Response({
+        "question": poll.message.text,
+        "is_open": poll.is_open,
+        "closes_at": poll.closes_at,
+        "voted_count": len(voted),
+        "not_voted_count": len(not_voted),
+        "voted": voted,
+        "not_voted": not_voted,
+    })
+
+
+# ================= CREATE AN EVENT =================
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_event(request, group_id):
+    """
+    {"title", "starts_at", "ends_at", "location", "description"}
+
+    Nothing is written to events.CalendarEvent. The student calendar reads
+    group events directly, because CalendarEvent filters students by
+    year_number alone and would show a Civil event to every other course.
+    """
+    group, err = _owner_only(request, group_id)
+    if err:
+        return err
+
+    title = (request.data.get("title") or "").strip()
+    if not title:
+        return Response({"detail": "An event needs a title."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    starts_at = parse_datetime(str(request.data.get("starts_at") or ""))
+    if not starts_at:
+        return Response({"detail": "An event needs a date and a start time."},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if timezone.is_naive(starts_at):
+        starts_at = timezone.make_aware(starts_at)
+
+    ends_at = parse_datetime(str(request.data.get("ends_at") or ""))
+    if ends_at and timezone.is_naive(ends_at):
+        ends_at = timezone.make_aware(ends_at)
+    if ends_at and ends_at <= starts_at:
+        return Response({"detail": "The end time must be after the start time."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    m = ClassMessage.objects.create(
+        group=group, sender=request.user, message_type=ClassMessage.EVENT,
+        title=title, text=(request.data.get("description") or "").strip(),
+    )
+    ClassEvent.objects.create(
+        message=m, starts_at=starts_at, ends_at=ends_at,
+        location=(request.data.get("location") or "").strip(),
+    )
+
+    notify(list(group.students()), f"📅 {title}",
+           f"{group.display_name} · {starts_at:%d %b, %I:%M %p}")
+    return Response(_one(m, request), status=status.HTTP_201_CREATED)

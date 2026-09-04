@@ -1,7 +1,9 @@
 # backend/classgroups/serializers.py
 from rest_framework import serializers
 
-from .models import ClassGroup, ClassMessage
+from django.utils import timezone
+
+from .models import ClassGroup, ClassMessage, ClassPollVote
 
 
 def person_name(u):
@@ -27,6 +29,8 @@ class ClassMessageSerializer(serializers.ModelSerializer):
     attachment_size_label = serializers.SerializerMethodField()
     can_delete = serializers.SerializerMethodField()
     can_pin = serializers.SerializerMethodField()
+    poll = serializers.SerializerMethodField()
+    event = serializers.SerializerMethodField()
 
     class Meta:
         model = ClassMessage
@@ -36,8 +40,68 @@ class ClassMessageSerializer(serializers.ModelSerializer):
             "attachment_url", "attachment_name", "attachment_size",
             "attachment_size_label",
             "is_pinned", "can_delete", "can_pin", "created_at",
+            "poll", "event",
         ]
         read_only_fields = fields
+
+    # ---------- poll ----------
+    def get_poll(self, o):
+        """
+        Counts and percentages for everyone; the student's own choice echoed
+        back to them. NEVER any names — the owner reads those from
+        .../responses/, which students cannot call.
+        """
+        if o.message_type != ClassMessage.POLL:
+            return None
+        poll = getattr(o, "poll", None)
+        if not poll:
+            return None
+
+        me = self._user()
+        is_owner = o.group.owner() == me
+
+        votes = list(poll.votes.all())
+        total = len(votes)
+        mine = next((v for v in votes if v.student_id == me.id), None)
+
+        options = []
+        for opt in poll.options.all():
+            n = sum(1 for v in votes if v.option_id == opt.id)
+            options.append({
+                "id": opt.id,
+                "text": opt.text,
+                "votes": n,
+                "percent": round(n * 100 / total) if total else 0,
+                "is_mine": bool(mine and mine.option_id == opt.id),
+            })
+
+        return {
+            "id": poll.id,
+            "closes_at": poll.closes_at,
+            "is_open": poll.is_open,
+            "total_votes": total,
+            "options": options,
+            "my_vote": mine.option_id if mine else None,
+            "my_vote_text": mine.option.text if mine else "",
+            "can_vote": poll.is_open and not mine and not is_owner,
+            "can_close": is_owner and poll.is_open,
+            "can_view_responses": is_owner,
+        }
+
+    # ---------- event ----------
+    def get_event(self, o):
+        if o.message_type != ClassMessage.EVENT:
+            return None
+        ev = getattr(o, "event", None)
+        if not ev:
+            return None
+        return {
+            "id": ev.id,
+            "starts_at": ev.starts_at,
+            "ends_at": ev.ends_at,
+            "location": ev.location,
+            "is_past": ev.starts_at < timezone.now(),
+        }
 
     def _user(self):
         return self.context["request"].user
