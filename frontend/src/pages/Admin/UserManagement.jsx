@@ -435,7 +435,6 @@ export default function UserManagement() {
     return roleMatch && deptMatch && semMatch && searchMatch;
   });
 
-  const subRoleOptions = SUB_ROLES[form.role] || [];
 
   // ================= FIELD HELPER (for the modal) =================
   // NOTE: `Field` is defined at module scope (bottom of this file) so it is NOT
@@ -681,14 +680,6 @@ export default function UserManagement() {
                   </div>
                 </div>
 
-                {subRoleOptions.length > 0 && (
-                  <Field label="Sub role">
-                    <select value={form.sub_role} onChange={(e) => set("sub_role", e.target.value)} style={{ width: "100%" }}>
-                      <option value="">Select sub role</option>
-                      {subRoleOptions.map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
-                    </select>
-                  </Field>
-                )}
 
                 {form.role !== "admin" && form.role !== "parent" && (
                   <div style={{ display: "flex", gap: 12 }}>
