@@ -28,7 +28,7 @@ const odStatusBadge = (r) => {
   if (r.status === "rejected")  return { key: "rejected",  text: "Rejected" };
   if (r.status === "cancelled") return { key: "cancelled", text: "Cancelled" };
   if (r.stage === "awaiting_hod") return { key: "awaiting_hod", text: "Awaiting HOD" };
-  return { key: "awaiting_tutor", text: "Awaiting tutor" };
+  return { key: "awaiting_tutor", text: "Awaiting class advisor" };
 };
 
 export default function AttendanceStudent() {
@@ -674,7 +674,7 @@ export default function AttendanceStudent() {
                               </div>
                             </div>
 
-                            {r.tutor_remark && <div className="att-od-remark"><b>Tutor:</b> {r.tutor_remark}</div>}
+                            {r.tutor_remark && <div className="att-od-remark"><b>Class advisor:</b> {r.tutor_remark}</div>}
                             {r.hod_remark && <div className="att-od-remark"><b>HOD:</b> {r.hod_remark}</div>}
                             {r.status === "approved" && <div className="att-od-approved-note">Counted as duty leave in your attendance.</div>}
                             {r.proof && <a href={r.proof} target="_blank" rel="noreferrer" className="att-od-proof">View proof</a>}

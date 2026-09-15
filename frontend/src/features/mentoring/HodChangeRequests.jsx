@@ -22,7 +22,7 @@ import "../../styles/MentorAllocation.css";
 
 const BUCKETS = [
   { key: "waiting", label: "Awaiting you" },
-  { key: "advisor", label: "With advisor" },
+  { key: "advisor", label: "With class advisor" },
   { key: "decided", label: "Decided" },
 ];
 

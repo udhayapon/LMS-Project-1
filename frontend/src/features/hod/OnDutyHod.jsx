@@ -108,7 +108,7 @@ export default function OnDutyHod() {
               {/* tutor's note from the first approval step */}
               {r.tutor_remark && (
                 <div className="att-od-prior">
-                  <b>Tutor:</b> {r.tutor_remark}
+                  <b>Class advisor:</b> {r.tutor_remark}
                 </div>
               )}
 

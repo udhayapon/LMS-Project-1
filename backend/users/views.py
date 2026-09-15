@@ -933,7 +933,7 @@ def hod_assign_tutor(request):
         return Response({"detail": "This course is not in your department."}, status=403)
 
     if YearTutor.objects.filter(year_id=year_id).exists():
-        return Response({"detail": "This year already has a tutor. Remove the existing one first."}, status=400)
+        return Response({"detail": "This year already has a class advisor. Remove the existing one first."}, status=400)
 
     try:
         course = Course.objects.get(id=course_id)
@@ -943,7 +943,7 @@ def hod_assign_tutor(request):
         return Response({"detail": "Invalid course, year or teacher."}, status=400)
 
     tutor = YearTutor.objects.create(course=course, year=year, teacher=teacher)
-    return Response({"id": tutor.id, "message": "Tutor assigned."}, status=201)
+    return Response({"id": tutor.id, "message": "Class advisor assigned."}, status=201)
 
 
 # ===================== HOD TUTOR: REMOVE =====================
@@ -960,13 +960,13 @@ def hod_remove_tutor(request, tutor_id):
     try:
         tutor = YearTutor.objects.get(id=tutor_id)
     except YearTutor.DoesNotExist:
-        return Response({"detail": "Tutor assignment not found."}, status=404)
+        return Response({"detail": "Class advisor assignment not found."}, status=404)
 
     if tutor.course_id not in course_ids:
         return Response({"detail": "This is not in your department."}, status=403)
 
     tutor.delete()
-    return Response({"message": "Tutor removed."})
+    return Response({"message": "Class advisor removed."})
 
 
 # ===================== TUTOR: MY CLASS =====================
@@ -2027,3 +2027,284 @@ def hod_allocate(request):
         "assigned_teacher_name": (teacher.first_name or teacher.username),
         "students_enrolled": enrolled,
     })
+
+# ============================================================================
+#  APPEND TO: backend/users/views.py
+#  (goes after the existing OD section, which ends with hod_od_action)
+#
+#  Permission rules are enforced here, not in React. Every queryset is scoped
+#  to the caller before anything is read or written.
+# ============================================================================
+
+from django.http import FileResponse, Http404
+
+
+def _staff_leave_or_404(pk):
+    from attendance.models import StaffLeaveRequest
+    try:
+        return StaffLeaveRequest.objects.select_related(
+            "teacher", "department", "hod"
+        ).get(pk=pk)
+    except StaffLeaveRequest.DoesNotExist:
+        raise Http404
+
+
+def _can_view_staff_leave(user, leave):
+    """Owner, the routed HOD, the current HOD of that department, or an admin."""
+    if leave.teacher_id == user.id:
+        return True
+    if leave.hod_id == user.id:
+        return True
+    if leave.department_id and leave.department_id in _hod_department_ids(user):
+        return True
+    return bool(user.is_staff or getattr(user, "role", "") == "admin")
+
+
+def _hod_department_ids(user):
+    from attendance.leave_service import hod_departments
+    return hod_departments(user)
+
+
+# ============================== TEACHER =====================================
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def staff_leave_create(request):
+    from attendance.leave_service import approver_for
+    from attendance.serializers import StaffLeaveRequestSerializer
+
+    user = request.user
+    if getattr(user, "role", "") != "teacher":
+        return Response({"detail": "Only teaching staff can apply here."}, status=403)
+
+    hod, error = approver_for(user)
+    if error:
+        return Response({"detail": error}, status=400)
+
+    ser = StaffLeaveRequestSerializer(data=request.data, context={"request": request})
+    ser.is_valid(raise_exception=True)
+    ser.save(teacher=user, department=user.department, hod=hod)
+    return Response(ser.data, status=201)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def staff_leave_my(request):
+    from attendance.models import StaffLeaveRequest
+    from attendance.serializers import StaffLeaveRequestSerializer
+
+    qs = StaffLeaveRequest.objects.filter(teacher=request.user).select_related(
+        "teacher", "department", "hod"
+    )
+    return Response(
+        StaffLeaveRequestSerializer(qs, many=True, context={"request": request}).data
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def staff_leave_detail(request, pk):
+    from attendance.serializers import StaffLeaveRequestDetailSerializer
+
+    leave = _staff_leave_or_404(pk)
+    if not _can_view_staff_leave(request.user, leave):
+        return Response({"detail": "Not yours to view."}, status=403)
+    return Response(
+        StaffLeaveRequestDetailSerializer(leave, context={"request": request}).data
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def staff_leave_cancel(request, pk):
+    from attendance.models import StaffLeaveRequest
+    from attendance.serializers import StaffLeaveRequestSerializer
+
+    leave = _staff_leave_or_404(pk)
+    if leave.teacher_id != request.user.id:
+        return Response({"detail": "Not yours to cancel."}, status=403)
+    if not leave.is_pending:
+        return Response(
+            {"detail": "Only a request still waiting for the HOD can be cancelled."},
+            status=400,
+        )
+
+    leave.status = StaffLeaveRequest.Status.CANCELLED
+    leave.save(update_fields=["status"])
+    return Response(
+        StaffLeaveRequestSerializer(leave, context={"request": request}).data
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def staff_leave_preview(request):
+    """
+    Feeds the "Classes during this leave" box on the apply form.
+    GET /api/users/staff-leave/preview/?from=2026-09-21&to=2026-09-23&session=full
+    """
+    from datetime import date
+    from attendance.leave_service import affected_periods, approver_for, count_leave_days
+
+    def parse(value):
+        try:
+            return date.fromisoformat(value)
+        except (TypeError, ValueError):
+            return None
+
+    from_date = parse(request.GET.get("from"))
+    to_date = parse(request.GET.get("to"))
+    session = request.GET.get("session", "full")
+    if not from_date or not to_date or to_date < from_date:
+        return Response({"detail": "Send a valid from and to date."}, status=400)
+
+    hod, error = approver_for(request.user)
+    return Response({
+        "days": count_leave_days(from_date, to_date, session),
+        "periods": affected_periods(request.user, from_date, to_date, session),
+        "approver": hod.username if hod else None,
+        "approver_department": (
+            request.user.department.name if request.user.department else None
+        ),
+        "blocked_reason": error,
+        "substitute_note": (
+            "These classes may need a substitute teacher. "
+            "Approving leave does not assign one."
+        ),
+    })
+
+
+# ================================= HOD ======================================
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def hod_staff_leave_pending(request):
+    from attendance.models import StaffLeaveRequest
+    from attendance.serializers import StaffLeaveRequestSerializer
+
+    dept_ids = _hod_department_ids(request.user)
+    if not dept_ids:
+        return Response({"detail": "You are not an HOD."}, status=403)
+
+    qs = (
+        StaffLeaveRequest.objects
+        .filter(department_id__in=dept_ids, status=StaffLeaveRequest.Status.PENDING)
+        .exclude(teacher=request.user)          # nobody approves their own leave
+        .select_related("teacher", "department", "hod")
+        .order_by("from_date")
+    )
+    return Response(
+        StaffLeaveRequestSerializer(qs, many=True, context={"request": request}).data
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def hod_staff_leave_history(request):
+    from attendance.models import StaffLeaveRequest
+    from attendance.serializers import StaffLeaveRequestSerializer
+
+    dept_ids = _hod_department_ids(request.user)
+    if not dept_ids:
+        return Response({"detail": "You are not an HOD."}, status=403)
+
+    qs = (
+        StaffLeaveRequest.objects
+        .filter(
+            department_id__in=dept_ids,
+            status__in=[
+                StaffLeaveRequest.Status.APPROVED,
+                StaffLeaveRequest.Status.REJECTED,
+            ],
+        )
+        .select_related("teacher", "department", "hod")
+        .order_by("-decided_at")
+    )
+    return Response(
+        StaffLeaveRequestSerializer(qs, many=True, context={"request": request}).data
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def hod_staff_leave_on_leave_today(request):
+    """Small panel on the HOD screen: who is away right now."""
+    from attendance.models import StaffLeaveRequest
+    from attendance.serializers import StaffLeaveRequestSerializer
+
+    dept_ids = _hod_department_ids(request.user)
+    if not dept_ids:
+        return Response({"detail": "You are not an HOD."}, status=403)
+
+    today = timezone.localdate()
+    qs = (
+        StaffLeaveRequest.objects
+        .filter(
+            department_id__in=dept_ids,
+            status=StaffLeaveRequest.Status.APPROVED,
+            from_date__lte=today,
+            to_date__gte=today,
+        )
+        .select_related("teacher", "department", "hod")
+    )
+    return Response(
+        StaffLeaveRequestSerializer(qs, many=True, context={"request": request}).data
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def hod_staff_leave_action(request, pk):
+    """Body: {"action": "approve" | "reject", "remark": "..."}"""
+    from attendance.models import StaffLeaveRequest
+    from attendance.serializers import StaffLeaveRequestSerializer
+
+    action = request.data.get("action")
+    remark = (request.data.get("remark") or "").strip()
+
+    leave = _staff_leave_or_404(pk)
+
+    if leave.department_id not in _hod_department_ids(request.user):
+        return Response(
+            {"detail": "You are not the HOD of that teacher's department."}, status=403
+        )
+    if leave.teacher_id == request.user.id:
+        return Response({"detail": "You cannot decide your own leave."}, status=403)
+    if not leave.is_pending:
+        return Response({"detail": "This request has already been decided."}, status=400)
+
+    if action == "approve":
+        leave.status = StaffLeaveRequest.Status.APPROVED
+    elif action == "reject":
+        if not remark:
+            return Response(
+                {"detail": "Add a remark so the teacher knows why it was rejected."},
+                status=400,
+            )
+        leave.status = StaffLeaveRequest.Status.REJECTED
+    else:
+        return Response({"detail": "action must be approve or reject."}, status=400)
+
+    leave.hod_remark = remark
+    leave.decided_by = request.user
+    leave.decided_at = timezone.now()
+    leave.save(update_fields=["status", "hod_remark", "decided_by", "decided_at"])
+
+    return Response(
+        StaffLeaveRequestSerializer(leave, context={"request": request}).data
+    )
+
+
+# ================================ PROOF =====================================
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def staff_leave_proof(request, pk):
+    """
+    Serves the uploaded file through a permission check, so a medical
+    certificate is not readable by anyone who guesses the /media/ URL.
+    """
+    leave = _staff_leave_or_404(pk)
+    if not _can_view_staff_leave(request.user, leave):
+        return Response({"detail": "Not yours to view."}, status=403)
+    if not leave.proof:
+        return Response({"detail": "No proof attached."}, status=404)
+
+    return FileResponse(leave.proof.open("rb"), filename=leave.proof.name.split("/")[-1])

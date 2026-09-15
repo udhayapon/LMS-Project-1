@@ -158,3 +158,8 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",   # Vite dev server
 ]
+
+# ================= COLLEGE WORKING CALENDAR =================
+from datetime import time
+COLLEGE_WORKING_WEEKDAYS = [0, 1, 2, 3, 4, 5]   # Mon=0 ... Sat=5. Use [0,1,2,3,4] for Mon-Fri.
+COLLEGE_AFTERNOON_STARTS_AT = time(13, 0)        # where forenoon ends

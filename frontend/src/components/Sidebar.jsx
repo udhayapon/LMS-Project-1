@@ -107,6 +107,7 @@ export default function Sidebar({ open, setOpen }) {
       { name: "My Mentees", path: "/my-mentees" },
       { name: "My Groups", path: "/my-groups" },
       { name: "Attendance", path: "/teacher/attendance" },
+      { name: "My Leave", path: "/teacher/leave" },
       { name: "Calendar", path: "/calendar" },
       { name: "Results", path: "/results" },
       { name: "Student Progress", path: "/teacher-progress" },

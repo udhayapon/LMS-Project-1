@@ -77,6 +77,7 @@ import StaffMyMentees from "./features/mentoring/StaffMyMentees";
 import StudentMyMentor from "./features/mentoring/StudentMyMentor";
 import ClassGroups from "./features/classgroups/ClassGroups";
 import MyClass from "./features/tutor/MyClass";
+import MyLeave from "./features/leave/MyLeave";
 import TeacherTeachingPlan from "./features/teachingplan/TeacherTeachingPlan";
 import HODTeachingPlan from "./features/teachingplan/HODTeachingPlan";
 import HodTeamProposals from "./features/mentoring/HodTeamProposals";
@@ -234,6 +235,7 @@ function App() {
             No sidebar link — reachable by direct URL only. */}
         <Route path="/teaching-assignments" element={ <ProtectedRoute adminOnly={true}><TeachingAssignments /></ProtectedRoute> }/>
         <Route path="/teacher/attendance" element={<ProtectedRoute role="teacher"><AttendanceTeacher /></ProtectedRoute>} />
+        <Route path="/teacher/leave" element={<ProtectedRoute role="teacher"><MyLeave /></ProtectedRoute>} />
         <Route path="/student/attendance" element={<ProtectedRoute role="student"><AttendanceStudent /></ProtectedRoute>} />
         <Route path="/results" element={<ProtectedRoute><Results /></ProtectedRoute>} />
         <Route path="/student/electives" element={ <ProtectedRoute role="student"> <ElectiveEnroll /> </ProtectedRoute> }/>
