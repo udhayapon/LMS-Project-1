@@ -12,9 +12,13 @@ import Courses from "./features/courses/Courses";
 import CourseDetails from "./features/courses/CourseDetails";
 import CourseStructure from "./features/courses/CourseStructure";
 import Years from "./features/years/Years";
+
 //import Subjects from "./features/subjects/Subjects";
+
 import TeachingAssignments from "./features/teaching/TeachingAssignments";
 import FeedbackHistory from "./features/feedback/FeedbackHistory";
+
+
 // ===== TIMETABLE =====
 import TimetableBuilder from "./features/timetable/TimetableBuilder";
 import TimetableView from "./features/timetable/TimetableView";  
@@ -50,6 +54,7 @@ import StudentGrades from "./pages/Student/StudentGrades";
 import StudentTeachingPlan from "./features/teachingplan/StudentTeachingPlan";
 import ElectiveEnroll from "./features/courses/ElectiveEnroll";
 
+
 // ===== PARENT =====
 import ParentDashboard from "./pages/Parent/ParentDashboard";
 import ParentAttendance from "./features/attendance/ParentAttendance";
@@ -59,6 +64,7 @@ import ParentGrades from "./pages/Parent/ParentGrades";
 import ParentChat from "./pages/Parent/ParentChat";
 import ParentMessage from "./pages/Parent/ParentMessage";
 
+// ==== HOD ====
 import HODDepartment from "./features/hod/HODDepartment";
 import HodAllocation from "./features/hod/HodAllocation";
 import HodMentorAllocation from "./features/mentoring/HodMentorAllocation";
@@ -71,8 +77,10 @@ import StaffMyMentees from "./features/mentoring/StaffMyMentees";
 import StudentMyMentor from "./features/mentoring/StudentMyMentor";
 import ClassGroups from "./features/classgroups/ClassGroups";
 import MyClass from "./features/tutor/MyClass";
+import MyLeave from "./features/leave/MyLeave";
 import TeacherTeachingPlan from "./features/teachingplan/TeacherTeachingPlan";
 import HODTeachingPlan from "./features/teachingplan/HODTeachingPlan";
+import HodTeamProposals from "./features/mentoring/HodTeamProposals";
 
 
 // ===== IQAC =====
@@ -227,6 +235,7 @@ function App() {
             No sidebar link — reachable by direct URL only. */}
         <Route path="/teaching-assignments" element={ <ProtectedRoute adminOnly={true}><TeachingAssignments /></ProtectedRoute> }/>
         <Route path="/teacher/attendance" element={<ProtectedRoute role="teacher"><AttendanceTeacher /></ProtectedRoute>} />
+        <Route path="/teacher/leave" element={<ProtectedRoute role="teacher"><MyLeave /></ProtectedRoute>} />
         <Route path="/student/attendance" element={<ProtectedRoute role="student"><AttendanceStudent /></ProtectedRoute>} />
         <Route path="/results" element={<ProtectedRoute><Results /></ProtectedRoute>} />
         <Route path="/student/electives" element={ <ProtectedRoute role="student"> <ElectiveEnroll /> </ProtectedRoute> }/>
@@ -268,6 +277,8 @@ function App() {
         <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
        
         <Route path="/announcements" element={<ProtectedRoute><Announcements /></ProtectedRoute>} />
+
+        
         {/* ================= PROFILE ================= */}
 
         <Route
@@ -355,14 +366,21 @@ function App() {
 
         <Route path="/hod/mentor-dashboard" element={
           <ProtectedRoute role="teacher"><HodMentorDashboard /></ProtectedRoute>} />
-                <Route path="/hod/mentor-change-requests" element={
+
+        <Route path="/hod/mentor-change-requests" element={
           <ProtectedRoute role="teacher"><HodChangeRequests /></ProtectedRoute>} />
+
         <Route path="/hod/mentor-history" element={
           <ProtectedRoute role="teacher"><HodAllocationHistory /></ProtectedRoute>} />
+
         <Route path="/hod/mentor-settings" element={
           <ProtectedRoute role="teacher"><HodMentoringSettings /></ProtectedRoute>} />
+
         <Route path="/hod/mentors/:mentorId" element={
           <ProtectedRoute role="teacher"><HodMentorDetail /></ProtectedRoute>} />
+
+        <Route path="/hod/team-proposals" element={
+          <ProtectedRoute role="teacher"><HodTeamProposals /></ProtectedRoute>} />
 
         {/* ================= MY MENTEES (STAFF) ================= */}
         <Route path="/my-mentees" element={

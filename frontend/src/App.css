@@ -176,6 +176,7 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 /* ================= NAVBAR ================= */
@@ -202,6 +203,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  min-height: 0;
 }
 
 /* ================= HEADER ================= */

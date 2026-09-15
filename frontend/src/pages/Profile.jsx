@@ -5,11 +5,13 @@ import Sidebar from "../components/Sidebar";
 import API from "../api";
 import "../App.css";
 
+// matches how every other page shows the year — I, II, III, IV
+const YEAR_LABEL = { 1: "I", 2: "II", 3: "III", 4: "IV" };
+
 export default function Profile() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
   const [open, setOpen] = useState(false);
-  const [courseName, setCourseName] = useState("-");
   const [profileData, setProfileData] = useState(null);
 
   // change-password
@@ -30,24 +32,11 @@ export default function Profile() {
     }
   };
 
-  const fetchCourse = async () => {
-    try {
-      if (user.role === "student") {
-        const res = await API.get("/enrollments/");
-        const enrollments = res.data?.results || res.data || [];
-        const myEnrollment = enrollments.find(
-          (e) => (e.student?.id || e.student) === user.id
-        );
-        if (myEnrollment) setCourseName(myEnrollment.course_name);
-      }
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
+  // The course comes from /users/ as course_name. It used to be looked up
+  // through /enrollments/, which returned nothing for a student with no
+  // enrolment rows and left the field reading "-".
   useEffect(() => {
     fetchProfile();
-    fetchCourse();
   }, []);
 
   const handleChangePassword = async () => {
@@ -113,22 +102,65 @@ export default function Profile() {
                     <div className="prof-field-label">Role</div>
                     <div className="prof-field-value" style={{ textTransform: "capitalize" }}>{user?.role}</div>
                   </div>
-                  <div>
-                    <div className="prof-field-label">
-                      {user?.role === "student" ? "Roll Number" : "Employee ID"}
+                  {/* A row with nothing in it tells the reader less than no row
+                      at all — an admin has neither an employee id nor a
+                      department, and two dashes just look like a bug. */}
+                  {(profileData?.roll_number || profileData?.employee_id) && (
+                    <div>
+                      <div className="prof-field-label">
+                        {user?.role === "student" ? "Roll Number" : "Employee ID"}
+                      </div>
+                      <div className="prof-field-value">
+                        {profileData?.roll_number || profileData?.employee_id}
+                      </div>
                     </div>
-                    <div className="prof-field-value">
-                      {profileData?.roll_number || profileData?.employee_id || "-"}
+                  )}
+                  {profileData?.department_name && (
+                    <div>
+                      <div className="prof-field-label">Department</div>
+                      <div className="prof-field-value">{profileData.department_name}</div>
                     </div>
-                  </div>
-                  <div>
-                    <div className="prof-field-label">Department</div>
-                    <div className="prof-field-value">{profileData?.department_name || "-"}</div>
-                  </div>
-                  {user?.role === "student" && (
+                  )}
+                  {user?.role === "student" && profileData?.course_name && (
                     <div>
                       <div className="prof-field-label">Course</div>
-                      <div className="prof-field-value">{courseName}</div>
+                      <div className="prof-field-value">{profileData.course_name}</div>
+                    </div>
+                  )}
+                  {user?.role === "student" && profileData?.year && (
+                    <div>
+                      <div className="prof-field-label">Year / Semester</div>
+                      <div className="prof-field-value">
+                        {YEAR_LABEL[profileData.year] || profileData.year} Year
+                        {profileData.semester ? ` · Semester ${profileData.semester}` : ""}
+                      </div>
+                    </div>
+                  )}
+                  {user?.role !== "student" && profileData?.sub_role_label && (
+                    <div>
+                      <div className="prof-field-label">Designation</div>
+                      <div className="prof-field-value">{profileData.sub_role_label}</div>
+                    </div>
+                  )}
+                  {/* These two live on FacultyProfile, which is a separate row.
+                      get_profile_data returns null when a staff member has no
+                      such row, so both correctly stay hidden rather than
+                      showing an empty value. */}
+                  {user?.role !== "student" && profileData?.profile_data?.qualification && (
+                    <div>
+                      <div className="prof-field-label">Qualification</div>
+                      <div className="prof-field-value">
+                        {profileData.profile_data.qualification}
+                      </div>
+                    </div>
+                  )}
+                  {user?.role !== "student" && profileData?.profile_data?.experience_years != null && (
+                    <div>
+                      <div className="prof-field-label">Experience</div>
+                      <div className="prof-field-value">
+                        {profileData.profile_data.experience_years} year
+                        {profileData.profile_data.experience_years === 1 ? "" : "s"}
+                      </div>
                     </div>
                   )}
                 </div>

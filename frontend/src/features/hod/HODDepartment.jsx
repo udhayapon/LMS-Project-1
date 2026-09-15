@@ -5,6 +5,7 @@ import Navbar from "../../components/Navbar";
 import API from "../../api";
 import HOdTutors from "./HOdTutors";
 import OnDutyHod from "./OnDutyHod";
+import StaffLeaveHod from "./StaffLeaveHod";
 import GridPanel from "../timetable/GridPanel";
 import "../../App.css";
 import "../../styles/Attendance.css";
@@ -202,8 +203,9 @@ export default function HODDepartment() {
                     <button className={tab === "timetable" ? "btn-primary" : ""} onClick={() => setTab("timetable")}>Timetable</button>
                     <button className={tab === "teachers" ? "btn-primary" : ""} onClick={() => setTab("teachers")}>Faculty</button>
                     <button className={tab === "students" ? "btn-primary" : ""} onClick={() => setTab("students")}>Students</button>
-                    <button className={tab === "tutors" ? "btn-primary" : ""} onClick={() => setTab("tutors")}>Tutors</button>
+                    <button className={tab === "tutors" ? "btn-primary" : ""} onClick={() => setTab("tutors")}>Class Advisors</button>
                     <button className={tab === "onduty" ? "btn-primary" : ""} onClick={() => setTab("onduty")}>On Duty</button>
+                    <button className={tab === "staffleave" ? "btn-primary" : ""} onClick={() => setTab("staffleave")}>Staff Leave</button>
                   </div>
 
                   {/* ===== OVERVIEW ===== */}
@@ -298,7 +300,7 @@ export default function HODDepartment() {
                                       </div>
                                     </div>
                                     <div>
-                                      <div className="sd-label">Tutor</div>
+                                      <div className="sd-label">Class Advisor</div>
                                       <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", lineHeight: 1.3, marginTop: 2 }}>{c.tutor_name || "—"}</div>
                                     </div>
                                     <div>
@@ -378,7 +380,7 @@ export default function HODDepartment() {
                                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
                                   <div className="sd-pt" style={{ margin: 0 }}>All subjects</div>
                                   {resultsTutor && (
-                                    <span style={{ fontSize: 12.5, color: "#667085" }}>Tutor: {resultsTutor}</span>
+                                    <span style={{ fontSize: 12.5, color: "#667085" }}>Class advisor: {resultsTutor}</span>
                                   )}
                                 </div>
                                 <table className="sd-tbl">
@@ -534,6 +536,7 @@ export default function HODDepartment() {
 
                   {/* ===== ON DUTY ===== */}
                   {tab === "onduty" && <OnDutyHod />}
+                  {tab === "staffleave" && <StaffLeaveHod />}
 
                 </>
               )}

@@ -220,13 +220,13 @@ export default function MyClass() {
 
               <h1 className="sd-hello">My Class</h1>
               <p className="sd-sub">
-                {isTutor && cls ? `Tutor — ${cls.course_name} · Year ${cls.year_number}` : "Class overview"}
+                {isTutor && cls ? `Class advisor — ${cls.course_name} · Year ${cls.year_number}` : "Class overview"}
               </p>
 
               {loading && <div className="sd-panel">Loading…</div>}
 
               {!loading && !isTutor && (
-                <div className="sd-panel">You are not assigned as a tutor for any class.</div>
+                <div className="sd-panel">You are not assigned as a class advisor for any class.</div>
               )}
 
               {!loading && isTutor && (

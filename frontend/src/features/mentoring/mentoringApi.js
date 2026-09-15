@@ -109,7 +109,7 @@ export const requestPill = (status) =>
     hod: { cls: "ma-blue", label: "Waiting on you" },
     approved: { cls: "ma-green", label: "Approved" },
     rejected: { cls: "ma-red", label: "Rejected" },
-    resolved: { cls: "ma-grey", label: "Resolved by the advisor" },
+    resolved: { cls: "ma-grey", label: "Resolved by the class advisor" },
     withdrawn: { cls: "ma-grey", label: "Withdrawn" },
   }[status] || { cls: "ma-grey", label: status || "—" });
 

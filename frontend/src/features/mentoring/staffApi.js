@@ -21,8 +21,13 @@ export const getThread = (id, p) => API.get(`${B}messages/${id}/${qs(p)}`).then(
 export const getGroups = (p) => API.get(`${B}groups/${qs(p)}`).then((r) => r.data);
 
 // ================= WRITE =================
-export const sendMessage = (id, text) =>
-  API.post(`${B}messages/${id}/`, { text }).then((r) => r.data);
+/** text, a file, or both. */
+export const sendMessage = (id, text, file) => {
+  const fd = new FormData();
+  fd.append("text", text || "");
+  if (file) fd.append("attachment", file);
+  return API.post(`${B}messages/${id}/`, fd).then((r) => r.data);
+};
 export const broadcast = (group, text) =>
   API.post(`${B}broadcast/`, { group, text }).then((r) => r.data);
 
@@ -42,6 +47,13 @@ export const when = (iso) => {
   const sameDay = d.toDateString() === now.toDateString();
   if (sameDay) return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+};
+
+export const fileSize = (n) => {
+  if (!n) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 };
 
 export const errorText = (err, fallback = "Something went wrong.") => {

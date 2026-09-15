@@ -133,6 +133,16 @@ class DecideProposalSerializer(serializers.Serializer):
     )
     decision = serializers.ChoiceField(choices=["approve", "reject"])
     note = serializers.CharField(required=False, allow_blank=True)
+    # optional: approve but with a different mentor than the advisor proposed
+    mentor_id = serializers.IntegerField(required=False)
+
+    def validate(self, data):
+        # the advisor has to redo the work, so they are owed a reason
+        if data["decision"] == "reject" and not (data.get("note") or "").strip():
+            raise serializers.ValidationError(
+                {"note": "Say why you are returning it - the advisor is shown this."}
+            )
+        return data
 
 
 class RemoveSerializer(serializers.Serializer):

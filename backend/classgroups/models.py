@@ -184,7 +184,14 @@ class ClassMessage(models.Model):
 
     TEXT = "text"
     ANNOUNCEMENT = "announcement"
-    TYPE_CHOICES = ((TEXT, "Message"), (ANNOUNCEMENT, "Announcement"))
+    POLL = "poll"
+    EVENT = "event"
+    TYPE_CHOICES = (
+        (TEXT, "Message"),
+        (ANNOUNCEMENT, "Announcement"),
+        (POLL, "Poll"),
+        (EVENT, "Event"),
+    )
 
     group = models.ForeignKey(
         ClassGroup, on_delete=models.CASCADE, related_name="messages"
@@ -249,3 +256,98 @@ class ClassMessageRead(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["group", "user"], name="one_read_mark_per_user")
         ]
+
+    # ================= POLL =================
+class ClassPoll(models.Model):
+    """
+    The question is the message's own `text`, so a poll reads in the
+    conversation like any other message and needs no second inbox.
+
+    Only the group owner creates one. That is checked against group.owner(),
+    not can_post() — the three posting switches govern ordinary messages and
+    must not silently decide who runs a poll.
+    """
+
+    message = models.OneToOneField(
+        ClassMessage, on_delete=models.CASCADE, related_name="poll"
+    )
+    closes_at = models.DateTimeField()
+    closed_early = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def is_open(self):
+        from django.utils import timezone
+        return not self.closed_early and timezone.now() < self.closes_at
+
+    def __str__(self):
+        return f"Poll on message {self.message_id}"
+
+
+class ClassPollOption(models.Model):
+    poll = models.ForeignKey(
+        ClassPoll, on_delete=models.CASCADE, related_name="options"
+    )
+    text = models.CharField(max_length=200)
+    order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return self.text
+
+
+class ClassPollVote(models.Model):
+    """
+    `poll` is stored beside `option` on purpose, even though it is reachable
+    through option.poll. It is what lets the database enforce one vote per
+    student — a check in the view would still lose a double-click.
+    """
+
+    poll = models.ForeignKey(
+        ClassPoll, on_delete=models.CASCADE, related_name="votes"
+    )
+    option = models.ForeignKey(
+        ClassPollOption, on_delete=models.CASCADE, related_name="votes"
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="class_poll_votes"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["poll", "student"], name="one_vote_per_student_per_poll"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.student} -> {self.option}"
+
+
+# ================= EVENT =================
+class ClassEvent(models.Model):
+    """
+    Title is the message's `title`, description is its `text` — the same two
+    fields an announcement uses. Only the dates and place are new.
+
+    There is no RSVP. A student reads the event; nobody is asked to answer,
+    which is why it can go onto the calendar with nothing to sync back.
+    """
+
+    message = models.OneToOneField(
+        ClassMessage, on_delete=models.CASCADE, related_name="event"
+    )
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField(null=True, blank=True)
+    location = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["starts_at"]
+
+    def __str__(self):
+        return f"{self.message.title} ({self.starts_at:%d %b %Y})"
+
+    

@@ -35,6 +35,21 @@ from .views import (
     student_withdraw_change_request,
 )
 
+# team-based allocation lives in its own module, so views.py stays readable
+from .team_views import (
+    student_teams,
+    student_join_team,
+    student_leave_team,
+    advisor_teams,
+    advisor_place_student,
+    advisor_auto_fill,
+    advisor_close_formation,
+    advisor_team_mentors,
+    advisor_submit_teams,
+    hod_team_proposals,
+    hod_mentor_rules,
+)
+
 urlpatterns = [
     # ================= HOD — MENTOR ALLOCATION =================
     path("mentoring/hod/dashboard/",        hod_dashboard),
@@ -49,6 +64,8 @@ urlpatterns = [
     path("mentoring/hod/history/",          hod_history),
     path("mentoring/hod/settings/",         hod_settings),
     path("mentoring/hod/options/",          hod_filter_options),
+    path("mentoring/hod/team-proposals/",   hod_team_proposals),
+    path("mentoring/hod/mentor-rules/",     hod_mentor_rules),
     path("mentoring/hod/change-requests/",  hod_change_requests),
     path("mentoring/hod/change-requests/<int:request_id>/", hod_change_request_detail),
     path("mentoring/hod/change-requests/<int:request_id>/decide/", hod_decide_change_request),
@@ -60,6 +77,12 @@ urlpatterns = [
     path("mentoring/staff/messages/<int:student_id>/", staff_thread),
     path("mentoring/staff/groups/",                  staff_groups),
     path("mentoring/staff/broadcast/",               staff_broadcast),
+    path("mentoring/staff/teams/",                   advisor_teams),
+    path("mentoring/staff/teams/place/",             advisor_place_student),
+    path("mentoring/staff/teams/auto-fill/",         advisor_auto_fill),
+    path("mentoring/staff/teams/close/",             advisor_close_formation),
+    path("mentoring/staff/teams/mentors/",           advisor_team_mentors),
+    path("mentoring/staff/teams/submit/",            advisor_submit_teams),
     path("mentoring/staff/change-requests/",         staff_change_requests),
     path("mentoring/staff/change-requests/<int:request_id>/", staff_change_request_detail),
     path("mentoring/staff/change-requests/<int:request_id>/act/", staff_act_change_request),
@@ -71,6 +94,9 @@ urlpatterns = [
     path("mentoring/student/my-mentor/",             student_my_mentor),
     path("mentoring/student/messages/",              student_thread),
     path("mentoring/student/announcements/",         student_announcements),
+    path("mentoring/student/teams/",                 student_teams),
+    path("mentoring/student/teams/join/",            student_join_team),
+    path("mentoring/student/teams/leave/",           student_leave_team),
     path("mentoring/student/change-request/",        student_change_request),
     path("mentoring/student/change-request/<int:request_id>/withdraw/",
          student_withdraw_change_request),

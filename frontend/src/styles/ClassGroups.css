@@ -338,3 +338,125 @@
   .cg-ov-cards { grid-template-columns: 1fr; }
   .cg-ov-title h2 { font-size: 22px; }
 }
+
+/* ================= POLL ================= */
+.cg-poll .ph { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cg-poll .pq { font-weight: 600; font-size: 14px; margin: 8px 0 12px; }
+
+.cg-st { display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+  color: #6b7280; font-weight: 600; }
+.cg-st .dot { width: 8px; height: 8px; border-radius: 50%; background: #12b76a; }
+.cg-st.closed .dot { background: #d0d5dd; }
+
+.cg-voted { display: flex; align-items: center; gap: 7px; background: #eafaf1;
+  color: #067647; border-radius: 9px; padding: 8px 11px; font-size: 12.5px;
+  font-weight: 600; margin-bottom: 10px; }
+
+.cg-opt { position: relative; border: 1px solid #e6e9ef; border-radius: 9px;
+  padding: 9px 12px; margin-bottom: 7px; overflow: hidden; background: #fff;
+  display: flex; align-items: center; gap: 10px; }
+.cg-opt .fill { position: absolute; inset: 0 auto 0 0; background: #eff4ff; }
+.cg-opt .t, .cg-opt .n, .cg-opt .radio { position: relative; z-index: 1; }
+.cg-opt .t { flex: 1; }
+.cg-opt .n { font-variant-numeric: tabular-nums; color: #6b7280; font-size: 12px; }
+.cg-opt.mine { border-color: #2563eb; }
+.cg-opt.mine .fill { background: #e2ecff; }
+.cg-opt.pick { cursor: pointer; }
+.cg-opt.pick:hover { border-color: #2563eb; }
+.cg-opt .radio { width: 15px; height: 15px; border-radius: 50%;
+  border: 1.5px solid #cbd5e1; flex: 0 0 auto; }
+.cg-opt.sel { border-color: #2563eb; }
+.cg-opt.sel .radio { border-color: #2563eb; border-width: 5px; }
+
+.cg-poll .pf { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 11px; padding-top: 10px; border-top: 1px solid #f0f2f6;
+  font-size: 11.5px; color: #9ca3af; }
+
+/* ================= EVENT ================= */
+.cg-ev .row { display: flex; gap: 14px; margin-top: 11px; }
+.cg-ev .dt { flex: 0 0 56px; height: 60px; border-radius: 11px; background: #f3efff;
+  color: #7c3aed; display: grid; place-items: center; align-content: center;
+  line-height: 1.1; }
+.cg-ev .dt .mo { font-size: 10.5px; }
+.cg-ev .dt .dy { font-size: 20px; font-weight: 700; }
+.cg-ev .bd { min-width: 0; flex: 1; }
+.cg-ev .ti { font-weight: 600; font-size: 14px; margin-bottom: 3px; }
+.cg-ev .me { font-size: 12px; color: #6b7280; }
+.cg-ev .ds { margin: 8px 0 0; font-size: 13px; }
+.cg-ev .cal { display: flex; align-items: center; gap: 7px; color: #067647;
+  font-size: 12px; font-weight: 600; margin-top: 11px; }
+
+/* a poll or an event is never "mine" in blue — it must stay readable */
+.cg-msg.me .bub:has(.cg-poll), .cg-msg.me .bub:has(.cg-ev) {
+  background: #fff; color: #1f2937; border: 1px solid #e6e9ef;
+}
+
+/* ================= CREATE ROW AND PANELS ================= */
+.cg-mk { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 0 16px 14px; background: #fff; }
+.cg-mk .hint { font-size: 11.5px; color: #9ca3af; margin-left: 4px; }
+
+.cg-mkpanel { margin: 0 16px 16px; border: 1px solid #e6e9ef; border-radius: 11px;
+  padding: 16px; background: #fcfcfd; }
+.cg-mkpanel .hd { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.cg-mkpanel .hd b { font-size: 14px; }
+.cg-mkpanel .hd span { font-size: 11.5px; color: #9ca3af; }
+.cg-mkpanel input, .cg-mkpanel textarea { width: 100%; padding: 9px 11px;
+  border: 1px solid #e6e9ef; border-radius: 9px; font-family: inherit;
+  font-size: 13px; background: #fff; }
+.cg-mkpanel textarea { min-height: 70px; resize: vertical; }
+.cg-mkpanel .orow { display: flex; gap: 8px; margin-bottom: 7px; }
+.cg-mkpanel .two { display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 12px; margin-top: 12px; }
+@media (max-width: 720px) { .cg-mkpanel .two { grid-template-columns: 1fr; } }
+
+/* ================= RESPONSES ================= */
+.cg-modal { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.45);
+  display: grid; place-items: center; z-index: 90; padding: 24px; }
+.cg-modal .box { background: #fff; border-radius: 13px; width: 100%;
+  max-width: 620px; max-height: 82vh; overflow: auto; }
+.cg-modal .hd { display: flex; align-items: center; gap: 10px; padding: 15px 18px;
+  border-bottom: 1px solid #e6e9ef; position: sticky; top: 0; background: #fff; }
+.cg-modal .hd b { font-size: 14px; display: block; }
+.cg-modal .hd span { font-size: 11.5px; color: #9ca3af; }
+.cg-modal table { width: 100%; border-collapse: collapse; }
+.cg-modal td { padding: 10px 18px; border-bottom: 1px solid #e6e9ef; font-size: 13px; }
+.cg-modal tr.sec td { background: #fafbfd; font-size: 10.5px; color: #9ca3af;
+  letter-spacing: 0.6px; font-weight: 600; padding: 9px 18px; }
+.cg-modal tr.nv td { color: #6b7280; }
+.cg-modal td.rn { color: #9ca3af; font-size: 12px; }
+.cg-modal .ft { padding: 12px 18px; font-size: 11.5px; color: #9ca3af;
+  background: #fcfcfd; border-top: 1px solid #e6e9ef; }
+
+  /* ================= PINNED STRIP ================= */
+.cg-pinned {
+  border-bottom: 1px solid #f3dcb0;
+  background: #fff9ef;
+  padding: 4px 0;
+}
+.cg-pin-row {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 8px 18px; border: 0; background: transparent;
+  font-family: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
+  color: #7c4a03;
+}
+.cg-pin-row:hover { background: #fff3dd; }
+.cg-pin-row .ic { flex: 0 0 auto; font-size: 13px; }
+.cg-pin-row .tx {
+  flex: 1; min-width: 0; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cg-pin-row .by { flex: 0 0 auto; color: #a97c3a; font-size: 11.5px; }
+
+/* ================= LIVE STRIP ON THE GROUP CARD ================= */
+.cg-live {
+  display: flex; gap: 9px; flex-wrap: wrap; align-items: center;
+  padding: 9px 18px; border-top: 1px solid #e6e9ef;
+  background: #f9fbff; color: #1d4ed8; font-size: 12px; font-weight: 600;
+}
+.cg-live .sep { color: #9ca3af; font-weight: 400; }
+
+/* four overview cards, not three */
+.cg-ov-cards { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 1200px) { .cg-ov-cards { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 700px)  { .cg-ov-cards { grid-template-columns: 1fr; } }

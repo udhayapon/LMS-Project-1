@@ -9,6 +9,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 const TABS = [
   { label: "Dashboard", path: "/hod/mentor-dashboard" },
   { label: "Mentor Allocation", path: "/hod/mentor-allocation" },
+  { label: "Team Proposals", path: "/hod/team-proposals" },
   { label: "Change Requests", path: "/hod/mentor-change-requests" },
   { label: "Allocation History", path: "/hod/mentor-history" },
   { label: "Settings", path: "/hod/mentor-settings" },

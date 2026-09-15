@@ -90,23 +90,23 @@ export default function HOdTutors() {
         teacher: pickValue,
       });
       const teacher = grid.teachers.find((t) => String(t.id) === String(pickValue));
-      showToast(`${teacher?.username || "Teacher"} assigned as tutor`);
+      showToast(`${teacher?.username || "Teacher"} assigned as class advisor`);
       setPickingYear(null);
       await fetchGrid(activeCourseId);
       fetchOverview();
     } catch (err) {
-      alert(err.response?.data?.detail || "Could not assign tutor");
+      alert(err.response?.data?.detail || "Could not assign class advisor");
     }
   };
 
   const removeTutor = async (tutorId, teacherName) => {
     try {
       await API.delete(`users/hod-remove-tutor/${tutorId}/`);
-      showToast(`${teacherName} removed as tutor`);
+      showToast(`${teacherName} removed as class advisor`);
       await fetchGrid(activeCourseId);
       fetchOverview();
     } catch {
-      alert("Could not remove tutor");
+      alert("Could not remove class advisor");
     }
   };
 
@@ -116,7 +116,7 @@ export default function HOdTutors() {
       <div className="sd-panel">
         <div className="sd-pt">Your department's courses</div>
         <p style={{ color: "#64748b", fontSize: 13.5, margin: "0 0 14px" }}>
-          Pick a course, then assign a class tutor to each year.
+          Pick a course, then assign a class advisor to each year.
         </p>
         <input
           placeholder="Course name…"
@@ -147,12 +147,12 @@ export default function HOdTutors() {
                 {c.total_years} year{c.total_years !== 1 ? "s" : ""} ·{" "}
                 {c.pending > 0 ? (
                   <span style={{ color: "#b45309", fontWeight: 700 }}>
-                    {c.pending} year(s) without a tutor
+                    {c.pending} year(s) without a class advisor
                   </span>
                 ) : "all years covered"}
               </div>
             </div>
-            <span style={{ color: "#3b5bdb", fontWeight: 600, fontSize: 13.5 }}>Assign tutors ›</span>
+            <span style={{ color: "#3b5bdb", fontWeight: 600, fontSize: 13.5 }}>Assign class advisors ›</span>
           </div>
         ))}
       </div>
@@ -162,7 +162,7 @@ export default function HOdTutors() {
         <div className="sd-panel" style={{ marginTop: 16 }} ref={gridRef}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
             <span style={{ fontSize: 16, fontWeight: 700, flex: 1 }}>
-              {grid?.course?.name || "…"} · Class Tutors
+              {grid?.course?.name || "…"} · Class Advisors
             </span>
             <button className="btn-delete" onClick={closeGrid}>Change course</button>
           </div>
@@ -216,7 +216,7 @@ export default function HOdTutors() {
                     <div
                       onClick={() => startPick(y.year_id)}
                       style={{ color: "#b45309", fontWeight: 600, fontSize: 13, marginTop: 10, cursor: "pointer" }}
-                    >+ Assign tutor</div>
+                    >+ Assign class advisor</div>
                   )}
                 </div>
               ))}

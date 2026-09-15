@@ -14,8 +14,15 @@ import {
   getGroup,
   getMessages,
   getMyGroups,
+  closeLabel,
+  closePoll,
+  createEvent,
+  createPoll,
+  getPollResponses,
   getSettings,
   getStudents,
+  votePoll,
+  whenFull,
   initials,
   saveSettings,
   sendMessage,
@@ -76,7 +83,22 @@ export default function ClassGroups() {
   // ================= FILTERS =================
   const [fileKind, setFileKind] = useState("all");
   const [studentQ, setStudentQ] = useState("");
-  const [annOnly, setAnnOnly] = useState(false);
+  // "all" | "announcement" | "poll" | "event"
+  const [feed, setFeed] = useState("all");
+
+  // one ref per message so the pinned strip can scroll to the real thing
+  const msgRefs = useRef({});
+
+  // ---- poll and event creation (teacher only) ----
+  const [mode, setMode] = useState("");            // "" | "poll" | "event"
+  const [pq, setPq] = useState("");
+  const [popts, setPopts] = useState(["", ""]);
+  const [pclose, setPclose] = useState("");
+  const [ev, setEv] = useState({
+    title: "", date: "", start: "", end: "", location: "", description: "",
+  });
+  const [picked, setPicked] = useState({});        // messageId -> optionId
+  const [responses, setResponses] = useState(null);
 
   const flash = (m) => {
     setToast(m);
@@ -184,14 +206,14 @@ export default function ClassGroups() {
   useEffect(() => {
     if (!groupId || view !== "conv") return;
     setMessages([]);
-    getMessages(groupId, annOnly ? { type: "announcement" } : {})
+    getMessages(groupId, feed === "all" ? {} : { type: feed })
       .then((d) => {
         setMessages(d.results || []);
         setConvMeta({ can_post: d.can_post, blocked_reason: d.blocked_reason });
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
       })
       .catch((err) => flash(errorText(err, "Could not load the conversation.")));
-  }, [groupId, view, annOnly]);
+  }, [groupId, view, feed]);
 
   useEffect(() => {
     if (!groupId || view !== "students") return;
@@ -245,6 +267,83 @@ export default function ClassGroups() {
       flash(errorText(err, "Could not send."));
     } finally {
       setBusy(false);
+    }
+  };
+
+    // ================= POLLS AND EVENTS =================
+  const replaceMsg = (m) =>
+    setMessages((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+
+  const resetMode = () => {
+    setMode("");
+    setPq(""); setPopts(["", ""]); setPclose("");
+    setEv({ title: "", date: "", start: "", end: "", location: "", description: "" });
+  };
+
+  const doCreatePoll = async () => {
+    const options = popts.map((o) => o.trim()).filter(Boolean);
+    if (!pq.trim()) { flash("Write the question first."); return; }
+    if (options.length < 2) { flash("A poll needs at least two options."); return; }
+    if (!pclose) { flash("Set when the poll closes."); return; }
+    setBusy(true);
+    try {
+      const m = await createPoll(groupId, {
+        question: pq.trim(), options, closes_at: pclose,
+      });
+      setMessages((prev) => [...prev, m]);
+      resetMode();
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
+    } catch (err) {
+      flash(errorText(err, "Could not create the poll."));
+    } finally { setBusy(false); }
+  };
+
+  const doCreateEvent = async () => {
+    if (!ev.title.trim()) { flash("The event needs a title."); return; }
+    if (!ev.date || !ev.start) { flash("Set the date and start time."); return; }
+    setBusy(true);
+    try {
+      const m = await createEvent(groupId, {
+        title: ev.title.trim(),
+        starts_at: `${ev.date}T${ev.start}`,
+        ends_at: ev.end ? `${ev.date}T${ev.end}` : "",
+        location: ev.location.trim(),
+        description: ev.description.trim(),
+      });
+      setMessages((prev) => [...prev, m]);
+      resetMode();
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
+    } catch (err) {
+      flash(errorText(err, "Could not create the event."));
+    } finally { setBusy(false); }
+  };
+
+  const doVote = async (m) => {
+    const optionId = picked[m.id];
+    if (!optionId) { flash("Pick an option first."); return; }
+    setBusy(true);
+    try {
+      replaceMsg(await votePoll(groupId, m.poll.id, optionId));
+      flash("Your vote was recorded.");
+    } catch (err) {
+      flash(errorText(err, "Could not record your vote."));
+    } finally { setBusy(false); }
+  };
+
+  const doClosePoll = async (m) => {
+    if (!window.confirm("Close this poll now? Nobody can vote afterwards.")) return;
+    try {
+      replaceMsg(await closePoll(groupId, m.poll.id));
+    } catch (err) {
+      flash(errorText(err, "Could not close the poll."));
+    }
+  };
+
+  const openResponses = async (m) => {
+    try {
+      setResponses(await getPollResponses(groupId, m.poll.id));
+    } catch (err) {
+      flash(errorText(err, "Could not load the responses."));
     }
   };
 
@@ -314,6 +413,41 @@ export default function ClassGroups() {
   const GroupNav = () => (
     <div className="cg-nav">
       <button className="back" onClick={() => setView("groups")}>← All groups</button>
+      {responses && (
+        <div className="cg-modal" onClick={() => setResponses(null)}>
+          <div className="box" onClick={(e) => e.stopPropagation()}>
+            <div className="hd">
+              <div>
+                <b>View responses</b>
+                <span>{responses.question}</span>
+              </div>
+              <div style={{ flex: 1 }} />
+              <button className="ma-btn small" onClick={() => setResponses(null)}>Close</button>
+            </div>
+            <table>
+              <tbody>
+                <tr className="sec"><td colSpan={3}>VOTED · {responses.voted_count}</td></tr>
+                {responses.voted.map((r) => (
+                  <tr key={`v${r.id}`}>
+                    <td>{r.name}</td><td className="rn">{r.roll_number}</td><td>{r.option}</td>
+                  </tr>
+                ))}
+                <tr className="sec"><td colSpan={3}>NOT VOTED · {responses.not_voted_count}</td></tr>
+                {responses.not_voted.map((r) => (
+                  <tr key={`n${r.id}`} className="nv">
+                    <td>{r.name}</td><td className="rn">{r.roll_number}</td><td>—</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="ft">
+              Two states only. A student who opened the poll and did not answer
+              appears as Not voted. Students never receive this list.
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="cg-tabs">
         {tabs.map(([k, label]) => (
           <button key={k} className={view === k ? "on" : ""} onClick={() => setView(k)}>
@@ -382,8 +516,28 @@ export default function ClassGroups() {
         </div>
         <div className="stat"><b>{g.message_count}</b><span>Messages</span></div>
         <div className="stat"><b>{g.announcement_count}</b><span>Announcements</span></div>
-        <div className="stat"><b>{g.file_count}</b><span>Files</span></div>
+                <div className="stat"><b>{g.file_count}</b><span>Files</span></div>
       </div>
+
+      {/* Shown only when something is actually live — a row of zeros on every
+          card would tell the teacher nothing. */}
+      {(g.open_polls > 0 || g.next_event_at) && (
+        <div className="cg-live">
+          {g.open_polls > 0 && (
+            <span>📊 {g.open_polls} poll{g.open_polls === 1 ? "" : "s"} open</span>
+          )}
+          {g.open_polls > 0 && g.next_event_at && <span className="sep">·</span>}
+          {g.next_event_at && (
+            <span>
+              📅 Next event{" "}
+              {new Date(g.next_event_at).toLocaleDateString("en-GB", {
+                day: "numeric", month: "short",
+              })}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className={`src${g.has_audience ? "" : " red"}`}>
         {g.has_audience
           ? kind === "subj"
@@ -558,6 +712,15 @@ export default function ClassGroups() {
                         <div className="n">{group.file_count}</div>
                         <div className="d">Shared in the conversation</div>
                       </div>
+                      <div className="ma-card">
+                        <div className="l">Open polls</div>
+                        <div className="n">{group.open_polls ?? 0}</div>
+                        <div className="d">
+                          {group.open_polls
+                            ? "Still taking votes"
+                            : "Nothing waiting on the class"}
+                        </div>
+                      </div>
                     </div>
 
                     <div className="cg-ov-grid">
@@ -630,10 +793,44 @@ export default function ClassGroups() {
                         </div>
                         <div style={{ flex: 1 }} />
                         <div className="cg-filt">
-                          <button className={annOnly ? "" : "on"} onClick={() => setAnnOnly(false)}>All</button>
-                          <button className={annOnly ? "on" : ""} onClick={() => setAnnOnly(true)}>Announcements</button>
+                          {[
+                            ["all", "All"],
+                            ["announcement", "Announcements"],
+                            ["poll", "Polls"],
+                            ["event", "Events"],
+                          ].map(([k, label]) => (
+                            <button key={k} className={feed === k ? "on" : ""}
+                                    onClick={() => setFeed(k)}>
+                              {label}
+                            </button>
+                          ))}
                         </div>
                       </div>
+
+                      {/* Pinned sits above the feed rather than being sorted to
+                          the top of it — hoisting a message would put it above
+                          its own date separator and out of order. */}
+                      {messages.some((m) => m.is_pinned) && (
+                        <div className="cg-pinned">
+                          {messages.filter((m) => m.is_pinned).map((m) => (
+                            <button
+                              key={`pin${m.id}`}
+                              className="cg-pin-row"
+                              onClick={() =>
+                                msgRefs.current[m.id]?.scrollIntoView({
+                                  behavior: "smooth", block: "center",
+                                })
+                              }
+                            >
+                              <span className="ic">📌</span>
+                              <span className="tx">
+                                {m.title || m.text || m.attachment_name || "Pinned message"}
+                              </span>
+                              <span className="by">{m.sender_name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
 
                       <div className="cg-msgs">
                         {messages.length === 0 && (
@@ -648,7 +845,7 @@ export default function ClassGroups() {
                             new Date(prev.created_at).toDateString() !==
                               new Date(m.created_at).toDateString();
                           return (
-                            <div key={m.id}>
+                            <div key={m.id} ref={(el) => (msgRefs.current[m.id] = el)}>
                               {newDay && <div className="cg-day">{dayLabel(m.created_at)}</div>}
                               <div className={`cg-msg ${m.from_me ? "me" : "them"}`}>
                                 <div className={`bub${m.message_type === "announcement" ? " ann" : ""}`}>
@@ -658,8 +855,118 @@ export default function ClassGroups() {
                                   {!m.from_me && m.message_type !== "announcement" && (
                                     <b className="who">{m.sender_name}</b>
                                   )}
-                                  {m.title && <b className="ttl">{m.title}</b>}
-                                  {m.text}
+                                  {m.message_type === "poll" && m.poll && (
+                                    <div className="cg-poll">
+                                      <div className="ph">
+                                        <span className="ma-pill ma-blue">📊 Poll</span>
+                                        <span className={`cg-st${m.poll.is_open ? "" : " closed"}`}>
+                                          <span className="dot" />
+                                          {m.poll.is_open
+                                            ? `Active · Closes ${closeLabel(m.poll.closes_at)}`
+                                            : `Closed · ${m.poll.total_votes} votes`}
+                                        </span>
+                                      </div>
+                                      <div className="pq">{m.text}</div>
+
+                                      {m.poll.my_vote_text && (
+                                        <div className="cg-voted">
+                                          ✓ You voted for {m.poll.my_vote_text}
+                                        </div>
+                                      )}
+
+                                      {m.poll.options.map((o) => {
+                                        const blind = m.poll.can_vote;
+                                        const sel = picked[m.id] === o.id;
+                                        return (
+                                          <div
+                                            key={o.id}
+                                            className={`cg-opt${o.is_mine ? " mine" : ""}${blind ? " pick" : ""}${sel ? " sel" : ""}`}
+                                            onClick={blind
+                                              ? () => setPicked((p) => ({ ...p, [m.id]: o.id }))
+                                              : undefined}
+                                          >
+                                            {!blind && (
+                                              <div className="fill" style={{ width: `${o.percent}%` }} />
+                                            )}
+                                            {blind && <span className="radio" />}
+                                            <span className="t">{o.text}</span>
+                                            {!blind && (
+                                              <span className="n">{o.votes} votes · {o.percent}%</span>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+
+                                      <div className="pf">
+                                        <span>
+                                          {m.poll.can_vote
+                                            ? "Pick one, then Vote. You cannot change it afterwards."
+                                            : `${m.poll.total_votes} votes`}
+                                        </span>
+                                        <div style={{ flex: 1 }} />
+                                        {m.poll.can_vote && (
+                                          <button className="ma-btn small primary"
+                                                  disabled={!picked[m.id] || busy}
+                                                  onClick={() => doVote(m)}>Vote</button>
+                                        )}
+                                        {!m.poll.can_vote && m.poll.my_vote && (
+                                          <button className="ma-btn small" disabled>Voted</button>
+                                        )}
+                                        {m.poll.can_view_responses && (
+                                          <button className="ma-btn small"
+                                                  onClick={() => openResponses(m)}>View responses</button>
+                                        )}
+                                        {m.poll.can_close && (
+                                          <button className="ma-btn small"
+                                                  onClick={() => doClosePoll(m)}>Close now</button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {m.message_type === "event" && m.event && (
+                                    <div className="cg-ev">
+                                      <span className="ma-pill ma-purple">📅 Event</span>
+                                      <div className="row">
+                                        <div className="dt">
+                                          <span className="mo">
+                                            {new Date(m.event.starts_at)
+                                              .toLocaleDateString("en-GB", { month: "short" })
+                                              .toUpperCase()}
+                                          </span>
+                                          <span className="dy">
+                                            {new Date(m.event.starts_at).getDate()}
+                                          </span>
+                                        </div>
+                                        <div className="bd">
+                                          <div className="ti">{m.title}</div>
+                                          <div className="me">
+                                            {whenFull(m.event.starts_at)}
+                                            {m.event.ends_at
+                                              ? ` – ${new Date(m.event.ends_at)
+                                                  .toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
+                                              : ""}
+                                          </div>
+                                          {m.event.location && (
+                                            <div className="me">📍 {m.event.location}</div>
+                                          )}
+                                          {m.text && <p className="ds">{m.text}</p>}
+                                          <div className="cal">
+                                            ✓ {isOwner
+                                              ? `On the calendar of all ${group.student_count} students in this group`
+                                              : "Added to your calendar"}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {m.message_type !== "poll" && m.message_type !== "event" && (
+                                    <>
+                                      {m.title && <b className="ttl">{m.title}</b>}
+                                      {m.text}
+                                    </>
+                                  )}
                                   {m.attachment_url && isAudio(m.attachment_name) && (
                                     <div className="cg-voice">
                                       <span className="ic">🎤</span>
@@ -792,6 +1099,108 @@ export default function ClassGroups() {
                             />
                             <button className="ma-btn primary" onClick={doSend} disabled={busy}>Send</button>
                           </div>
+
+                          {/* Only the teacher creates a poll or an event. This
+                              row is not rendered for a student at all, so there
+                              is no disabled button to wonder about. */}
+                          {isOwner && !mode && (
+                            <div className="cg-mk">
+                              <button className="ma-btn" onClick={() => setMode("poll")}>+ Create Poll</button>
+                              <button className="ma-btn" onClick={() => setMode("event")}>+ Create Event</button>
+                              <span className="hint">Only you can create these. Students vote and read.</span>
+                            </div>
+                          )}
+
+                          {isOwner && mode === "poll" && (
+                            <div className="cg-mkpanel">
+                              <div className="hd">
+                                <b>New poll</b>
+                                <span>{group.student_count} students will see this</span>
+                                <div style={{ flex: 1 }} />
+                                <button className="ma-btn small" onClick={resetMode}>Cancel</button>
+                              </div>
+                              <span className="ma-label">Question</span>
+                              <input value={pq} onChange={(e) => setPq(e.target.value)}
+                                     placeholder="Which day suits everyone for the review?" />
+                              <span className="ma-label" style={{ marginTop: 12 }}>Options</span>
+                              {popts.map((o, i) => (
+                                <div key={i} className="orow">
+                                  <input
+                                    value={o}
+                                    placeholder={`Option ${i + 1}`}
+                                    onChange={(e) => setPopts((p) =>
+                                      p.map((x, j) => (j === i ? e.target.value : x)))}
+                                  />
+                                  {popts.length > 2 && (
+                                    <button className="ma-btn small"
+                                            onClick={() => setPopts((p) => p.filter((_, j) => j !== i))}>×</button>
+                                  )}
+                                </div>
+                              ))}
+                              {popts.length < 10 && (
+                                <button className="ma-btn small"
+                                        onClick={() => setPopts((p) => [...p, ""])}>+ Add option</button>
+                              )}
+                              <span className="ma-label" style={{ marginTop: 12 }}>Closes</span>
+                              <input type="datetime-local" value={pclose}
+                                     onChange={(e) => setPclose(e.target.value)} />
+                              <div className="ma-note grey" style={{ margin: "12px 0" }}>
+                                <b>Students see counts, not names</b>
+                                You can open the response list. They cannot, and the poll
+                                says so. A student votes once and cannot change it.
+                              </div>
+                              <button className="ma-btn primary" onClick={doCreatePoll} disabled={busy}>
+                                Post poll
+                              </button>
+                            </div>
+                          )}
+
+                          {isOwner && mode === "event" && (
+                            <div className="cg-mkpanel">
+                              <div className="hd">
+                                <b>New event</b>
+                                <span>{group.student_count} students will see this</span>
+                                <div style={{ flex: 1 }} />
+                                <button className="ma-btn small" onClick={resetMode}>Cancel</button>
+                              </div>
+                              <span className="ma-label">Title</span>
+                              <input value={ev.title}
+                                     onChange={(e) => setEv({ ...ev, title: e.target.value })}
+                                     placeholder="Industrial visit — Chettinad Cement" />
+                              <div className="two">
+                                <div>
+                                  <span className="ma-label">Date</span>
+                                  <input type="date" value={ev.date}
+                                         onChange={(e) => setEv({ ...ev, date: e.target.value })} />
+                                </div>
+                                <div>
+                                  <span className="ma-label">Starts</span>
+                                  <input type="time" value={ev.start}
+                                         onChange={(e) => setEv({ ...ev, start: e.target.value })} />
+                                </div>
+                                <div>
+                                  <span className="ma-label">Ends</span>
+                                  <input type="time" value={ev.end}
+                                         onChange={(e) => setEv({ ...ev, end: e.target.value })} />
+                                </div>
+                              </div>
+                              <span className="ma-label" style={{ marginTop: 12 }}>Location</span>
+                              <input value={ev.location}
+                                     onChange={(e) => setEv({ ...ev, location: e.target.value })}
+                                     placeholder="Assemble at the main gate" />
+                              <span className="ma-label" style={{ marginTop: 12 }}>Description</span>
+                              <textarea value={ev.description}
+                                        onChange={(e) => setEv({ ...ev, description: e.target.value })} />
+                              <div className="ma-note" style={{ margin: "12px 0" }}>
+                                <b>This appears on the student calendar</b>
+                                Under Calendar for the {group.student_count} students in
+                                this group, and nobody outside it.
+                              </div>
+                              <button className="ma-btn primary" onClick={doCreateEvent} disabled={busy}>
+                                Post event
+                              </button>
+                            </div>
+                          )}
                         </>
                       ) : (
                         <div className="cg-lock">

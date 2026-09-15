@@ -57,6 +57,40 @@ export const togglePin = (id, messageId) =>
 export const saveSettings = (id, body) =>
   API.patch(`${B}${id}/settings/`, body).then((r) => r.data);
 
+// ================= POLLS AND EVENTS =================
+// JSON, not multipart — nothing here carries a file.
+
+/** body: { question, options: [string], closes_at: "2026-09-08T17:00" } */
+export const createPoll = (id, body) =>
+  API.post(`${B}${id}/polls/`, body).then((r) => r.data);
+
+export const votePoll = (id, pollId, optionId) =>
+  API.post(`${B}${id}/polls/${pollId}/vote/`, { option_id: optionId })
+    .then((r) => r.data);
+
+export const closePoll = (id, pollId) =>
+  API.post(`${B}${id}/polls/${pollId}/close/`).then((r) => r.data);
+
+/** Teacher only — the server returns 403 for a student. */
+export const getPollResponses = (id, pollId) =>
+  API.get(`${B}${id}/polls/${pollId}/responses/`).then((r) => r.data);
+
+/** body: { title, starts_at, ends_at, location, description } */
+export const createEvent = (id, body) =>
+  API.post(`${B}${id}/events/`, body).then((r) => r.data);
+
+// ================= HELPERS =================
+export const whenFull = (iso) =>
+  !iso ? "" : new Date(iso).toLocaleString("en-GB", {
+    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+  });
+
+/** "Sep 8, 5:00 PM" for the poll status line. */
+export const closeLabel = (iso) =>
+  !iso ? "" : new Date(iso).toLocaleString("en-GB", {
+    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+  });
+
 // ================= HELPERS =================
 export const when = (iso) => {
   if (!iso) return "";
