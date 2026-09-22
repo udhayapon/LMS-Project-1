@@ -14,6 +14,25 @@
    ========================================================================== */
 
 .att-od-badge.pending { background: #dbeafe; color: #1d4ed8; }
+.att-od-badge.recorded { background: #ede9fe; color: #6d28d9; }
+
+/* ── HOD leave: backup dropdown + covering notice ── */
+.sl-backup { margin-top: 14px; max-width: 420px; }
+
+.sl-covering {
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 18px;
+}
+.sl-covering-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #5b21b6;
+  margin-bottom: 6px;
+}
+.sl-covering-row { font-size: 0.84rem; color: #334155; padding: 3px 0; }
 
 /* ── form helpers ── */
 .sl-hint { font-size: 0.75rem; color: #94a3b8; margin-top: 5px; }

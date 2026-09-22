@@ -29,6 +29,7 @@ const STATUS_HELP = [
   { key: "approved", text: "Approved", help: "HOD approved the leave" },
   { key: "rejected", text: "Rejected", help: "HOD rejected the leave" },
   { key: "cancelled", text: "Cancelled", help: "Teacher cancelled the request" },
+  { key: "recorded", text: "Recorded", help: "HOD leave saved and backup informed. No approval needed" },
 ];
 
 const fmtDate = (iso) => {
@@ -65,6 +66,8 @@ export default function MyLeave() {
   const [session, setSession] = useState("full");
   const [reason, setReason] = useState("");
   const [proof, setProof] = useState(null);
+  const [backup, setBackup] = useState("");
+  const [covering, setCovering] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -76,6 +79,7 @@ export default function MyLeave() {
   const [detailLoading, setDetailLoading] = useState(false);
 
   const singleDay = from && from === to;
+  const isHod = !!preview?.is_hod;
   const needsProof = LEAVE_TYPES.find((t) => t.value === type)?.proof;
 
   const loadList = async () => {
@@ -90,6 +94,16 @@ export default function MyLeave() {
     }
   };
   useEffect(() => { loadList(); }, []);
+
+  const loadCovering = async () => {
+    try {
+      const res = await API.get("users/staff-leave/covering/");
+      setCovering(res.data?.results || res.data || []);
+    } catch (err) {
+      console.error("Covering load error:", err);
+    }
+  };
+  useEffect(() => { loadCovering(); }, []);
 
   // server decides the day count and the affected periods — never the browser
   useEffect(() => {
@@ -108,7 +122,7 @@ export default function MyLeave() {
     return () => { cancelled = true; };
   }, [from, to, session]);
 
-  useEffect(() => { setFormError(""); }, [type, from, to, session]);
+  useEffect(() => { setFormError(""); }, [type, from, to, session, backup]);
   const onFromChange = (value) => {
     setFrom(value);
     if (!to || to < value) setTo(value);
@@ -124,6 +138,7 @@ export default function MyLeave() {
     if (to < from) return setFormError("The end date cannot be before the start date.");
     if (reason.trim().length < 5) return setFormError("Write a short reason.");
     if (needsProof && !proof) return setFormError("Attach proof for this leave type.");
+    if (isHod && !backup) return setFormError("Choose who will cover your work during this leave.");
 
     const body = new FormData();
     body.append("leave_type", type);
@@ -132,6 +147,7 @@ export default function MyLeave() {
     body.append("session", singleDay ? session : "full");
     body.append("reason", reason.trim());
     if (proof) body.append("proof", proof);
+    if (isHod) body.append("backup", backup);
 
     setSubmitting(true);
     try {
@@ -139,7 +155,7 @@ export default function MyLeave() {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setType("casual"); setFrom(""); setTo(""); setSession("full");
-      setReason(""); setProof(null); setPreview(null);
+      setReason(""); setProof(null); setPreview(null); setBackup("");
       const input = document.getElementById("leave-proof-input");
       if (input) input.value = "";
       await loadList();
@@ -178,7 +194,7 @@ export default function MyLeave() {
   const year = String(new Date().getFullYear());
   const takenDays = (t) =>
     list
-      .filter((r) => r.status === "approved" && r.leave_type === t && String(r.from_date).startsWith(year))
+      .filter((r) => (r.status === "approved" || r.status === "recorded") && r.leave_type === t && String(r.from_date).startsWith(year))
       .reduce((sum, r) => sum + Number(r.days || 0), 0);
   const pendingCount = list.filter((r) => r.status === "pending").length;
 
@@ -239,6 +255,19 @@ export default function MyLeave() {
                   <div className="att-sum-hint">Requests</div>
                 </div>
               </div>
+
+              {covering.length > 0 && (
+                <div className="sl-covering">
+                  <div className="sl-covering-title">You are covering for your HOD</div>
+                  {covering.map((c) => (
+                    <div key={c.id} className="sl-covering-row">
+                      <b>{c.teacher_name}</b> is on leave from {fmtDate(c.from_date)}
+                      {c.to_date !== c.from_date ? ` to ${fmtDate(c.to_date)}` : ""}.
+                      You are handling department work during this period.
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="att-tabs">
                 <button
@@ -339,6 +368,21 @@ export default function MyLeave() {
                     )}
                   </div>
 
+                  {isHod && (
+                    <div className="att-field sl-backup">
+                      <label className="att-label">During my absence (backup)</label>
+                      <select className="att-input" value={backup} onChange={(e) => setBackup(e.target.value)}>
+                        <option value="">Select a teacher from your department</option>
+                        {(preview?.backup_options || []).map((t) => (
+                          <option key={t.id} value={t.id}>{t.username}</option>
+                        ))}
+                      </select>
+                      <div className="sl-hint">
+                        As HOD, your leave is recorded, not approved. The teacher you choose will see a handover notice.
+                      </div>
+                    </div>
+                  )}
+
                   {preview?.blocked_reason && (
                     <div className="sl-blocked">{preview.blocked_reason}</div>
                   )}
@@ -352,12 +396,15 @@ export default function MyLeave() {
                         {preview.approver_department ? `, HOD of ${preview.approver_department},` : ""} for approval
                       </span>
                     )}
+                    {isHod && (
+                      <span className="sl-to">Recorded as HOD leave. No approval needed.</span>
+                    )}
                     <button
                       className="att-btn-primary sl-submit"
                       onClick={submit}
                       disabled={submitting || !!preview?.blocked_reason}
                     >
-                      {submitting ? "Sending…" : "Send to HOD"}
+                      {submitting ? "Sending…" : isHod ? "Submit leave" : "Send to HOD"}
                     </button>
                   </div>
                 </div>
@@ -392,12 +439,17 @@ export default function MyLeave() {
                               ? <a className="att-od-proof" href={detail.proof_url} target="_blank" rel="noreferrer">View proof</a>
                               : <span className="sl-na">Not attached</span>}</div>
                           </div>
-                          <div className="sl-row"><div className="sl-k">Approver</div><div>{detail.hod_name || "—"}</div></div>
+                          <div className="sl-row"><div className="sl-k">Approver</div><div>{detail.hod_name || (detail.backup_name ? "Not needed (HOD leave)" : "—")}</div></div>
+                          {detail.backup_name && (
+                            <div className="sl-row"><div className="sl-k">Backup</div><div>{detail.backup_name}</div></div>
+                          )}
                           <div className="sl-row"><div className="sl-k">Applied on</div><div>{fmtDate((detail.created_at || "").slice(0, 10))}</div></div>
                           <div className="sl-row"><div className="sl-k">Decision</div>
                             <div>{detail.decided_at
                               ? `${badgeOf(detail.status).text} on ${fmtDate(detail.decided_at.slice(0, 10))}`
-                              : <span className="sl-na">Not decided yet</span>}</div>
+                              : detail.status === "recorded"
+                                ? "Recorded, no approval needed"
+                                : <span className="sl-na">Not decided yet</span>}</div>
                           </div>
                           <div className="sl-row"><div className="sl-k">HOD remark</div>
                             <div>{detail.hod_remark || <span className="sl-na">None</span>}</div>
@@ -436,13 +488,14 @@ export default function MyLeave() {
                                   <div className="att-od-reason-cell">{r.reason}</div>
                                   <div className="att-od-actions">
                                     <button className="att-btn-outline" onClick={() => openDetail(r.id)}>Details</button>
-                                    {r.status === "pending" && (
+                                    {(r.status === "pending" || r.status === "recorded") && (
                                       <button className="att-btn-outline" onClick={() => cancel(r.id)}>Cancel request</button>
                                     )}
                                     <span className={`att-od-badge ${badge.key}`}>{badge.text}</span>
                                   </div>
                                 </div>
                                 {r.hod_remark && <div className="att-od-remark"><b>HOD:</b> {r.hod_remark}</div>}
+                                {r.backup_name && <div className="att-od-remark"><b>Backup:</b> {r.backup_name}</div>}
                                 {r.proof_url && (
                                   <a className="att-od-proof" href={r.proof_url} target="_blank" rel="noreferrer">View proof</a>
                                 )}

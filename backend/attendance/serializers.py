@@ -77,6 +77,7 @@ class StaffLeaveRequestSerializer(serializers.ModelSerializer):
     session_label = serializers.CharField(source="get_session_display", read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
     hod_name = serializers.CharField(source="hod.username", read_only=True, default="")
+    backup_name = serializers.CharField(source="backup.username", read_only=True, default="")
     proof_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -92,11 +93,12 @@ class StaffLeaveRequestSerializer(serializers.ModelSerializer):
             "proof", "proof_url",
             "status", "status_label",
             "hod", "hod_name", "hod_remark",
+            "backup", "backup_name",
             "decided_at", "created_at",
         ]
         read_only_fields = [
             "teacher", "department", "days",
-            "status", "hod", "hod_remark", "decided_at", "created_at",
+            "status", "hod", "hod_remark", "backup", "decided_at", "created_at",
         ]
 
     def get_proof_url(self, obj):
@@ -150,6 +152,7 @@ class StaffLeaveRequestSerializer(serializers.ModelSerializer):
                 status__in=[
                     StaffLeaveRequest.Status.PENDING,
                     StaffLeaveRequest.Status.APPROVED,
+                    StaffLeaveRequest.Status.RECORDED,
                 ],
                 from_date__lte=to_date,
                 to_date__gte=from_date,

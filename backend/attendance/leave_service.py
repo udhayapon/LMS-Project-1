@@ -191,9 +191,30 @@ def approver_for(teacher):
         return None, f"{dept.name} has no HOD set. Ask the admin to assign one."
 
     if hod.id == teacher.id:
-        return None, (
-            "You are the HOD of this department, so no one here can approve "
-            "your leave. Principal approval is not part of the system yet."
-        )
+        # The HOD's own leave is recorded with a backup, not approved.
+        return None, None
 
     return hod, None
+
+
+def is_department_hod(teacher):
+    """True if this teacher is the HOD of their own department."""
+    dept = department_of(teacher)
+    return bool(dept and dept.hod_id == teacher.id)
+
+
+def backup_options(teacher):
+    """Teachers in the same department who can cover, excluding the HOD."""
+    from django.contrib.auth import get_user_model
+
+    dept = department_of(teacher)
+    if dept is None:
+        return []
+    User = get_user_model()
+    return list(
+        User.objects
+        .filter(role="teacher", department=dept, is_active=True)
+        .exclude(id=teacher.id)
+        .order_by("username")
+        .values("id", "username")
+    )

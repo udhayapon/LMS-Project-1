@@ -123,6 +123,7 @@ class StaffLeaveRequest(models.Model):
         APPROVED = "approved", "Approved"
         REJECTED = "rejected", "Rejected"
         CANCELLED = "cancelled", "Cancelled"
+        RECORDED = "recorded", "Recorded"   # HOD leave: saved, no approval needed
 
     class LeaveType(models.TextChoices):
         CASUAL = "casual", "Casual leave"
@@ -193,6 +194,14 @@ class StaffLeaveRequest(models.Model):
         related_name="staff_leave_decisions",
     )
 
+    # HOD leave only: the teacher who handles the HOD's work during the leave.
+    backup = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="staff_leave_covering",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -215,7 +224,9 @@ class StaffLeaveRequest(models.Model):
     @property
     def is_open(self):
         """Still blocks an overlapping request."""
-        return self.status in (self.Status.PENDING, self.Status.APPROVED)
+        return self.status in (
+            self.Status.PENDING, self.Status.APPROVED, self.Status.RECORDED
+        )
 
     @property
     def needs_proof(self):

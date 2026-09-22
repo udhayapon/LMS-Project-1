@@ -2055,6 +2055,8 @@ def _can_view_staff_leave(user, leave):
         return True
     if leave.hod_id == user.id:
         return True
+    if leave.backup_id and leave.backup_id == user.id:
+        return True
     if leave.department_id and leave.department_id in _hod_department_ids(user):
         return True
     return bool(user.is_staff or getattr(user, "role", "") == "admin")
@@ -2069,13 +2071,46 @@ def _hod_department_ids(user):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def staff_leave_create(request):
-    from attendance.leave_service import approver_for
+    from django.contrib.auth import get_user_model
+    from attendance.leave_service import approver_for, is_department_hod
+    from attendance.models import StaffLeaveRequest
     from attendance.serializers import StaffLeaveRequestSerializer
 
     user = request.user
     if getattr(user, "role", "") != "teacher":
         return Response({"detail": "Only teaching staff can apply here."}, status=403)
 
+    # ── HOD's own leave: recorded with a backup, no approval ──
+    if is_department_hod(user):
+        backup_id = request.data.get("backup")
+        if not backup_id:
+            return Response(
+                {"detail": "Choose who will cover your work during this leave."},
+                status=400,
+            )
+        User = get_user_model()
+        try:
+            backup = User.objects.get(
+                pk=backup_id, role="teacher",
+                department=user.department, is_active=True,
+            )
+        except (User.DoesNotExist, ValueError, TypeError):
+            return Response(
+                {"detail": "Choose a teacher from your own department as backup."},
+                status=400,
+            )
+        if backup.id == user.id:
+            return Response({"detail": "You cannot choose yourself as backup."}, status=400)
+
+        ser = StaffLeaveRequestSerializer(data=request.data, context={"request": request})
+        ser.is_valid(raise_exception=True)
+        ser.save(
+            teacher=user, department=user.department, hod=None,
+            backup=backup, status=StaffLeaveRequest.Status.RECORDED,
+        )
+        return Response(ser.data, status=201)
+
+    # ── Normal teacher leave: goes to the HOD for approval (unchanged) ──
     hod, error = approver_for(user)
     if error:
         return Response({"detail": error}, status=400)
@@ -2122,9 +2157,11 @@ def staff_leave_cancel(request, pk):
     leave = _staff_leave_or_404(pk)
     if leave.teacher_id != request.user.id:
         return Response({"detail": "Not yours to cancel."}, status=403)
-    if not leave.is_pending:
+    if leave.status not in (
+        StaffLeaveRequest.Status.PENDING, StaffLeaveRequest.Status.RECORDED
+    ):
         return Response(
-            {"detail": "Only a request still waiting for the HOD can be cancelled."},
+            {"detail": "Only a pending or recorded leave can be cancelled."},
             status=400,
         )
 
@@ -2157,8 +2194,13 @@ def staff_leave_preview(request):
     if not from_date or not to_date or to_date < from_date:
         return Response({"detail": "Send a valid from and to date."}, status=400)
 
+    from attendance.leave_service import backup_options, is_department_hod
+
     hod, error = approver_for(request.user)
+    is_hod = is_department_hod(request.user)
     return Response({
+        "is_hod": is_hod,
+        "backup_options": backup_options(request.user) if is_hod else [],
         "days": count_leave_days(from_date, to_date, session),
         "periods": affected_periods(request.user, from_date, to_date, session),
         "approver": hod.username if hod else None,
@@ -2171,6 +2213,28 @@ def staff_leave_preview(request):
             "Approving leave does not assign one."
         ),
     })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def staff_leave_covering(request):
+    """HOD leaves this user is covering — today or later. Ends after to_date."""
+    from attendance.models import StaffLeaveRequest
+    from attendance.serializers import StaffLeaveRequestSerializer
+
+    qs = (
+        StaffLeaveRequest.objects
+        .filter(
+            backup=request.user,
+            status=StaffLeaveRequest.Status.RECORDED,
+            to_date__gte=timezone.localdate(),
+        )
+        .select_related("teacher", "department", "backup")
+        .order_by("from_date")
+    )
+    return Response(
+        StaffLeaveRequestSerializer(qs, many=True, context={"request": request}).data
+    )
 
 
 # ================================= HOD ======================================
