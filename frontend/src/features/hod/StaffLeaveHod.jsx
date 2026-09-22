@@ -240,6 +240,10 @@ export default function StaffLeaveHod() {
 
                   <div className="sl-reason">{r.reason}</div>
 
+                  {r.covering_warning && (
+                    <div className="sl-warn sl-indent">⚠ {r.covering_warning}</div>
+                  )}
+
                   {r.proof_url && (
                     <a className="att-od-proof sl-indent" href={r.proof_url} target="_blank" rel="noreferrer">
                       View proof

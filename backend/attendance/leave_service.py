@@ -215,6 +215,41 @@ def backup_options(teacher):
         User.objects
         .filter(role="teacher", department=dept, is_active=True)
         .exclude(id=teacher.id)
-        .order_by("username")
+                .order_by("username")
         .values("id", "username")
+    )
+
+
+def covering_warning(teacher, from_date, to_date, exclude_id=None):
+    """
+    If this teacher is the backup for an HOD leave that overlaps these dates,
+    return a warning sentence. Otherwise return None.
+
+    This only WARNS. It never blocks the teacher's leave.
+    """
+    from attendance.models import StaffLeaveRequest
+
+    if not from_date or not to_date:
+        return None
+
+    clash = (
+        StaffLeaveRequest.objects
+        .filter(
+            backup=teacher,
+            status=StaffLeaveRequest.Status.RECORDED,
+            from_date__lte=to_date,
+            to_date__gte=from_date,
+        )
+        .exclude(pk=exclude_id)
+        .select_related("teacher")
+        .order_by("from_date")
+        .first()
+    )
+    if clash is None:
+        return None
+
+    return (
+        f"{teacher.username} is the backup for {clash.teacher.username} "
+        f"from {clash.from_date.strftime('%d-%m-%Y')} "
+        f"to {clash.to_date.strftime('%d-%m-%Y')}."
     )

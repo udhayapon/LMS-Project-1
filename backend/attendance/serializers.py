@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.utils import timezone
 
 from .models import Attendance, ODRequest, StaffLeaveRequest
-from .leave_service import affected_periods, count_leave_days
+from .leave_service import affected_periods, count_leave_days, covering_warning
 
 
 class AttendanceSerializer(serializers.ModelSerializer):
@@ -79,6 +79,7 @@ class StaffLeaveRequestSerializer(serializers.ModelSerializer):
     hod_name = serializers.CharField(source="hod.username", read_only=True, default="")
     backup_name = serializers.CharField(source="backup.username", read_only=True, default="")
     proof_url = serializers.SerializerMethodField()
+    covering_warning = serializers.SerializerMethodField()
 
     class Meta:
         model = StaffLeaveRequest
@@ -93,13 +94,19 @@ class StaffLeaveRequestSerializer(serializers.ModelSerializer):
             "proof", "proof_url",
             "status", "status_label",
             "hod", "hod_name", "hod_remark",
-            "backup", "backup_name",
+            "backup", "backup_name", "covering_warning",
             "decided_at", "created_at",
         ]
         read_only_fields = [
             "teacher", "department", "days",
             "status", "hod", "hod_remark", "backup", "decided_at", "created_at",
         ]
+
+    def get_covering_warning(self, obj):
+        """Warn the HOD while deciding. Only pending requests need it."""
+        if obj.status != StaffLeaveRequest.Status.PENDING:
+            return None
+        return covering_warning(obj.teacher, obj.from_date, obj.to_date, exclude_id=obj.id)
 
     def get_proof_url(self, obj):
         """Permission-checked download link, not the raw /media/ path."""

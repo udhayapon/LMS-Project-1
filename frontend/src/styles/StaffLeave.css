@@ -34,6 +34,17 @@
 }
 .sl-covering-row { font-size: 0.84rem; color: #334155; padding: 3px 0; }
 
+/* ── backup-overlap warning (warns, never blocks) ── */
+.sl-warn {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: #92400e;
+}
+
 /* ── form helpers ── */
 .sl-hint { font-size: 0.75rem; color: #94a3b8; margin-top: 5px; }
 

@@ -2172,6 +2172,17 @@ def staff_leave_cancel(request, pk):
     )
 
 
+def _covering_warning_for_me(user, from_date, to_date):
+    """Same warning as the HOD sees, but written to the teacher themselves."""
+    from attendance.leave_service import covering_warning
+
+    text = covering_warning(user, from_date, to_date)
+    if not text:
+        return None
+    text = text.replace(f"{user.username} is the backup", "You are the backup", 1)
+    return f"{text} You can still submit. Your HOD will see this warning."
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def staff_leave_preview(request):
@@ -2201,6 +2212,7 @@ def staff_leave_preview(request):
     return Response({
         "is_hod": is_hod,
         "backup_options": backup_options(request.user) if is_hod else [],
+        "covering_warning": _covering_warning_for_me(request.user, from_date, to_date),
         "days": count_leave_days(from_date, to_date, session),
         "periods": affected_periods(request.user, from_date, to_date, session),
         "approver": hod.username if hod else None,

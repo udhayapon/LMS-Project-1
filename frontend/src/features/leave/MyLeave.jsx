@@ -383,6 +383,10 @@ export default function MyLeave() {
                     </div>
                   )}
 
+                  {preview?.covering_warning && (
+                    <div className="sl-warn">⚠ {preview.covering_warning}</div>
+                  )}
+
                   {preview?.blocked_reason && (
                     <div className="sl-blocked">{preview.blocked_reason}</div>
                   )}
