@@ -140,7 +140,7 @@ export default function StaffLeaveHod() {
 
   const dateRange = (r) =>
     `${fmtDate(r.from_date)}${r.to_date !== r.from_date ? ` → ${fmtDate(r.to_date)}` : ""}, ` +
-    `${r.session !== "full" ? r.session_label : `${r.days} days`}`;
+    `${r.session !== "full" ? r.session_label : `${Number(r.days)} ${Number(r.days) === 1 ? "day" : "days"}`}`;
 
   if (loading) {
     return (
@@ -172,7 +172,7 @@ export default function StaffLeaveHod() {
             </div>
             <div className="sl-row"><div className="sl-k">Leave type</div><div>{detail.leave_type_label}</div></div>
             <div className="sl-row"><div className="sl-k">From and to</div><div>{dateRange(detail)}</div></div>
-            <div className="sl-row"><div className="sl-k">Number of days</div><div>{detail.days}</div></div>
+            <div className="sl-row"><div className="sl-k">Number of days</div><div>{Number(detail.days)}</div></div>
             <div className="sl-row"><div className="sl-k">Reason</div><div>{detail.reason}</div></div>
             <div className="sl-row"><div className="sl-k">Proof</div>
               <div>{detail.proof_url
@@ -300,7 +300,7 @@ export default function StaffLeaveHod() {
                     <td>{r.teacher_name}</td>
                     <td>{r.leave_type_label}</td>
                     <td>{fmtDate(r.from_date)}{r.to_date !== r.from_date ? ` → ${fmtDate(r.to_date)}` : ""}</td>
-                    <td>{r.days}</td>
+                    <td>{Number(r.days)}</td>
                     <td><span className={`att-od-badge ${badgeOf(r.status).key}`}>{badgeOf(r.status).text}</span></td>
                     <td className="sl-muted">{r.hod_remark || "—"}</td>
                     <td><button className="att-btn-outline" onClick={() => openDetail(r.id)}>Details</button></td>
